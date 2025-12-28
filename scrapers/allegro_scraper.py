@@ -110,12 +110,6 @@ class AllegroScraper:
                         # Fallback - usuń query params i hash
                         url = full_url.split('?')[0].split('#')[0]
                     
-                    # Sprawdź duplikaty
-                    if self.db.offer_exists(url):
-                        stats['skipped_duplicate'] += 1
-                        logger.debug(f"🔄 Duplikat: {title[:30]}")
-                        continue
-                    
                     # Pobierz opis (jeśli dostępny na liście)
                     desc_el = offer.locator('[data-testid="listing-description"], .description, p')
                     description = ""
@@ -126,6 +120,13 @@ class AllegroScraper:
                             description = title
                     else:
                         description = title
+                    
+                    # Sprawdź duplikaty na podstawie treści (tytuł + opis)
+                    content = f"{title}\n{description}"
+                    if self.db.offer_exists(content):
+                        stats['skipped_duplicate'] += 1
+                        logger.debug(f"🔄 Duplikat: {title[:30]}")
+                        continue
                     
                     # KALKULACJA OPŁACALNOŚCI
                     profit_result = self.profit_calc.calculate(title, price_val, description)
@@ -203,8 +204,8 @@ class AllegroScraper:
                     except Exception as de:
                         logger.error(f"❌ Błąd Discord: {de}")
                     
-                    # Zapisz do bazy
-                    self.db.add_offer(url, title, price_val, 'allegro')
+                    # Zapisz do bazy (używając treści jako unique ID)
+                    self.db.add_offer(content, url, title, price_val, 'allegro')
                     
                 except Exception as e:
                     logger.error(f"❌ Błąd przetwarzania oferty: {e}")

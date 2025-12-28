@@ -130,12 +130,11 @@ class FacebookScraper:
                                 logger.debug(f"🚫 Model wyłączony: {text[:30]}")
                                 continue
                             
-                            # Wyciągnij link do posta PRZED kliknięciem (używamy jako unique ID)
+                            # Wyciągnij link do posta PRZED kliknięciem
                             post_url = None
                             notification_id = None
                             full_content = preview
                             price_val = 0
-                            is_duplicate = False
                             
                             try:
                                 import re
@@ -153,22 +152,8 @@ class FacebookScraper:
                                         post_url = f"https://www.facebook.com/groups/{group_match.group(1)}/posts/{post_match.group(1)}/"
                                         logger.info(f"   📍 Post URL: {post_url}")
                                         
-                                        # Użyj post_url jako unique ID (stabilniejsze niż preview)
+                                        # Użyj post_url jako unique ID
                                         notification_id = hashlib.md5(post_url.encode()).hexdigest()
-                                        
-                                        # Sprawdź czy już było w bazie
-                                        if self.db.fb_notification_exists(notification_id):
-                                            stats['skipped_duplicate'] += 1
-                                            logger.info(f"🔄 Duplikat FB (pomijam): {post_url}")
-                                            is_duplicate = True
-                                
-                                # Fallback - jeśli nie ma post_url, użyj starej metody
-                                if not notification_id:
-                                    notification_id = self._create_notification_id(group_name, preview)
-                                    if self.db.fb_notification_exists(notification_id):
-                                        stats['skipped_duplicate'] += 1
-                                        logger.info(f"🔄 Duplikat FB (fallback, pomijam): {group_name}")
-                                        is_duplicate = True
                             except Exception as e:
                                 logger.debug(f"   ⚠️ Błąd wyciągania URL: {e}")
                             
@@ -338,8 +323,8 @@ class FacebookScraper:
                             except Exception as de:
                                 logger.error(f"❌ Błąd Discord: {de}")
                             
-                            # Zapisz do bazy
-                            self.db.add_fb_notification(notification_id, group_name, full_content, post_url)
+                            # Zapisz do bazy (używając treści jako unique ID)
+                            self.db.add_fb_notification(full_content, group_name, post_url)
                             
                         except Exception as e:
                             logger.debug(f"⚠️ Błąd przetwarzania powiadomienia: {e}")

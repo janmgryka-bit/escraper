@@ -99,15 +99,15 @@ class OLXScraper:
                     raw_href = await link_el.get_attribute('href')
                     url = ("https://www.olx.pl" + raw_href if "olx.pl" not in raw_href else raw_href).split('#')[0]
                     
-                    # Sprawdź duplikaty
-                    if self.db.offer_exists(url):
-                        stats['skipped_duplicate'] += 1
-                        logger.debug(f"🔄 Duplikat: {url[:50]}...")
-                        continue
-                    
                     # Pobierz tytuł i opis
                     full_text = await offer.inner_text()
                     title = full_text.split('\n')[0]
+                    
+                    # Sprawdź duplikaty na podstawie treści (300 znaków)
+                    if self.db.offer_exists(full_text):
+                        stats['skipped_duplicate'] += 1
+                        logger.debug(f"🔄 Duplikat: {title[:30]}...")
+                        continue
                     
                     # Sprawdź czy model jest włączony
                     if not self.config.is_model_enabled(title):
@@ -254,8 +254,8 @@ class OLXScraper:
                         import traceback
                         logger.error(traceback.format_exc())
                     
-                    # Zapisz do bazy
-                    self.db.add_offer(url, title, price_val)
+                    # Zapisz do bazy (używając treści jako unique ID)
+                    self.db.add_offer(full_text, url, title, price_val, 'olx')
                     
                 except Exception as e:
                     logger.error(f"❌ Błąd przetwarzania oferty: {e}")
