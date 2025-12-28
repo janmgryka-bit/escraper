@@ -100,15 +100,8 @@ class AllegroScraper:
                     raw_href = await link_el.get_attribute('href')
                     full_url = "https://allegrolokalnie.pl" + raw_href if "allegrolokalnie.pl" not in raw_href else raw_href
                     
-                    # Wyciągnij ID oferty z URL (stabilny identyfikator)
-                    import re
-                    offer_id_match = re.search(r'/oferta/[^/]+-(\d+)', full_url)
-                    if offer_id_match:
-                        offer_id = offer_id_match.group(1)
-                        url = f"https://allegrolokalnie.pl/oferta/{offer_id}"
-                    else:
-                        # Fallback - usuń query params i hash
-                        url = full_url.split('?')[0].split('#')[0]
+                    # Usuń tylko hash, zostaw query params (potrzebne do działania linku)
+                    url = full_url.split('#')[0]
                     
                     # Pobierz opis (jeśli dostępny na liście)
                     desc_el = offer.locator('[data-testid="listing-description"], .description, p')
