@@ -177,8 +177,10 @@ class FacebookScraper:
                                 continue
                             
                             try:
-                                # Kliknij w powiadomienie żeby otworzyć post
-                                await notif.click(timeout=5000)
+                                # Przewiń element do widoku i kliknij
+                                await notif.scroll_into_view_if_needed(timeout=3000)
+                                await asyncio.sleep(0.5)
+                                await notif.click(timeout=10000, force=True)
                                 await asyncio.sleep(3)
                                 
                                 # Pobierz rzeczywisty URL po kliknięciu
@@ -297,12 +299,14 @@ class FacebookScraper:
                             else:
                                 color = discord_config['colors']['maybe']
                             
-                            # Użyj post_url jeśli jest, inaczej notifications URL
-                            final_url = post_url if post_url else self.fb_notifications_url
+                            # ZAWSZE użyj post_url - jeśli nie ma, pomiń post
+                            if not post_url:
+                                logger.warning(f"⚠️ Brak post_url dla: {group_name} - pomijam")
+                                continue
                             
                             embed = discord.Embed(
                                 title=f"🔵 Facebook - {group_name}", 
-                                url=final_url, 
+                                url=post_url, 
                                 color=color
                             )
                             
@@ -334,9 +338,8 @@ class FacebookScraper:
                             except Exception as de:
                                 logger.error(f"❌ Błąd Discord: {de}")
                             
-                            # Zapisz do bazy (z pełną treścią i poprawnym URL)
+                            # Zapisz do bazy
                             self.db.add_fb_notification(notification_id, group_name, full_content, post_url)
-                            logger.debug(f"   💾 Zapisano do bazy: {notification_id[:8]}... | URL: {post_url}")
                             
                         except Exception as e:
                             logger.debug(f"⚠️ Błąd przetwarzania powiadomienia: {e}")

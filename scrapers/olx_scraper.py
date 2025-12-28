@@ -81,7 +81,12 @@ class OLXScraper:
                         continue
                     
                     price_text = await price_el.inner_text()
-                    price_val = int(''.join(filter(str.isdigit, price_text.split(',')[0])))
+                    price_digits = ''.join(filter(str.isdigit, price_text.split(',')[0]))
+                    if not price_digits:
+                        stats['skipped_no_price'] += 1
+                        logger.debug(f"⚠️ Brak ceny w tekście: {price_text}")
+                        continue
+                    price_val = int(price_digits)
                     
                     # Sprawdź budżet
                     if price_val > max_budget:
