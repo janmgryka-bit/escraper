@@ -141,7 +141,7 @@ class FacebookScraper:
                                 continue
                             
                             # Kliknij w powiadomienie żeby otworzyć post
-                            post_url = self.fb_notifications_url
+                            post_url = None
                             full_content = preview
                             price_val = 0
                             
@@ -150,45 +150,85 @@ class FacebookScraper:
                                 await notif.click(timeout=5000)
                                 await asyncio.sleep(3)
                                 
-                                # Pobierz URL posta
-                                post_url = page.url
-                                
-                                # Jeśli udało się przejść do posta, skanuj treść
-                                if "groups" in post_url or "posts" in post_url:
-                                    logger.info(f"   📍 Otwieram post: {post_url}")
+                                # Pobierz URL posta (czysty, bez parametrów)
+                                current_url = page.url
+                                if "groups" in current_url or "posts" in current_url:
+                                    # Wyciągnij czysty URL (bez ?notif_id i innych parametrów)
+                                    post_url = current_url.split('?')[0]
+                                    logger.info(f"   📍 Post URL: {post_url}")
                                     
                                     # Poczekaj na załadowanie treści posta
-                                    await asyncio.sleep(2)
+                                    await asyncio.sleep(3)
                                     
-                                    # Spróbuj wyciągnąć pełną treść posta
+                                    # Spróbuj wyciągnąć PEŁNĄ treść posta (wszystkie div[dir="auto"])
                                     post_selectors = [
                                         'div[data-ad-preview="message"]',
                                         'div[data-ad-comet-preview="message"]',
-                                        'div[dir="auto"]',
+                                        'div[role="article"]',
                                         'div.x11i5rnm'
                                     ]
                                     
+                                    content_parts = []
                                     for post_selector in post_selectors:
-                                        content_locator = page.locator(post_selector).first
-                                        if await content_locator.count() > 0:
-                                            full_content = await content_locator.inner_text(timeout=3000)
-                                            logger.info(f"   ✅ Zeskanowano treść posta ({len(full_content)} znaków)")
-                                            break
+                                        content_locators = page.locator(post_selector)
+                                        count = await content_locators.count()
+                                        if count > 0:
+                                            # Zbierz tekst ze wszystkich pasujących elementów
+                                            for i in range(min(count, 5)):
+                                                try:
+                                                    text = await content_locators.nth(i).inner_text(timeout=2000)
+                                                    if text and len(text) > 20:
+                                                        content_parts.append(text)
+                                                except:
+                                                    continue
+                                            if content_parts:
+                                                break
+                                    
+                                    if content_parts:
+                                        full_content = "\n\n".join(content_parts)
+                                        logger.info(f"   ✅ Zeskanowano treść posta ({len(full_content)} znaków)")
+                                    else:
+                                        logger.warning(f"   ⚠️ Nie znaleziono treści posta, używam preview")
                                     
                                     # Wróć do powiadomień
                                     await page.goto(self.fb_notifications_url)
                                     await asyncio.sleep(2)
+                                else:
+                                    logger.warning(f"   ⚠️ Nie udało się przejść do posta, URL: {current_url}")
                                     
                             except Exception as e:
                                 logger.debug(f"   ⚠️ Nie udało się otworzyć posta: {e}")
                             
-                            # Spróbuj wyciągnąć cenę z treści
+                            # Spróbuj wyciągnąć cenę z treści (różne formaty)
                             import re
-                            price_match = re.search(r'(\d+)\s*z[łl]', full_content, re.IGNORECASE)
-                            if price_match:
-                                price_val = int(price_match.group(1))
+                            price_patterns = [
+                                r'(\d+)\s*z[łl]',  # 1500 zł
+                                r'cena[:\s]+(\d+)',  # cena: 1500
+                                r'(\d+)\s*pln',  # 1500 PLN
+                                r'(\d{3,5})(?!\d)',  # same cyfry 3-5 (np. 1500)
+                            ]
                             
-                            # KALKULACJA OPŁACALNOŚCI (jeśli znaleziono cenę)
+                            for pattern in price_patterns:
+                                price_match = re.search(pattern, full_content, re.IGNORECASE)
+                                if price_match:
+                                    price_val = int(price_match.group(1))
+                                    logger.debug(f"   💰 Znaleziono cenę: {price_val} zł")
+                                    break
+                            
+                            # POMIŃ JEŚLI BRAK CENY
+                            if price_val == 0:
+                                stats['skipped_irrelevant'] += 1
+                                logger.info(f"⏭️  FB: Brak ceny w poście - pomijam: {group_name}")
+                                continue
+                            
+                            # Sprawdź budżet
+                            max_budget = self.config.get_max_budget()
+                            if price_val > max_budget:
+                                stats['skipped_irrelevant'] += 1
+                                logger.debug(f"💰 FB: Poza budżetem: {price_val}zł > {max_budget}zł")
+                                continue
+                            
+                            # KALKULACJA OPŁACALNOŚCI
                             profit_result = None
                             if price_val > 0:
                                 profit_result = self.profit_calc.calculate(full_content, price_val, full_content)
@@ -214,15 +254,18 @@ class FacebookScraper:
                             else:
                                 color = discord_config['colors']['maybe']
                             
+                            # Użyj post_url jeśli jest, inaczej notifications URL
+                            final_url = post_url if post_url else self.fb_notifications_url
+                            
                             embed = discord.Embed(
                                 title=f"🔵 Facebook - {group_name}", 
-                                url=post_url, 
+                                url=final_url, 
                                 color=color
                             )
                             
-                            # Ogranicz treść
-                            content_display = full_content[:500]
-                            if len(full_content) > 500:
+                            # Pokaż PEŁNĄ treść (max 1500 znaków dla Discord)
+                            content_display = full_content[:1500]
+                            if len(full_content) > 1500:
                                 content_display += "..."
                             
                             embed.description = content_display
