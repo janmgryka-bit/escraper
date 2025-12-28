@@ -209,10 +209,11 @@ class OLXScraper:
                     
                     # AI Analiza (jeśli włączone)
                     if ai_result and discord_config['send_ai_analysis']:
+                        reasoning = ai_result.get('ai_reasoning', 'Brak szczegółów')
                         ai_text = (
-                            f"**Stan:** {ai_result['condition_score']}/10\n"
-                            f"**Warto:** {'✅ TAK' if ai_result['worth_buying'] else '❌ NIE'}\n"
-                            f"**Uwagi:** {ai_result['ai_reasoning'][:100]}..."
+                            f"**Stan:** {ai_result.get('condition_score', 5)}/10\n"
+                            f"**Warto:** {'✅ TAK' if ai_result.get('worth_buying', False) else '❌ NIE'}\n"
+                            f"**Uwagi:** {reasoning[:100]}..."
                         )
                         
                         # Dodaj analizę zdjęć jeśli jest
@@ -252,7 +253,9 @@ class OLXScraper:
                     self.db.add_offer(url, title, price_val)
                     
                 except Exception as e:
-                    logger.debug(f"⚠️ Błąd przetwarzania oferty: {e}")
+                    logger.error(f"❌ Błąd przetwarzania oferty: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
                     continue
             
             # SMART MATCHING
