@@ -29,6 +29,7 @@ chrome_profile/
 
 # Logs
 *.log
+scraper.log*
 
 # Output files
 *.txt

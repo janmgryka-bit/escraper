@@ -1,6 +1,9 @@
 import asyncio
 from datetime import datetime
 import discord
+import logging
+
+logger = logging.getLogger('escraper.fb')
 
 class FacebookScraper:
     def __init__(self):
@@ -18,13 +21,16 @@ class FacebookScraper:
         """
         page = await context.new_page()
         try:
+            logger.info("🔔 Rozpoczynam sprawdzanie powiadomień FB...")
             print(f"🔔 [{datetime.now().strftime('%H:%M')}] Sprawdzam dzwoneczek FB...")
             await page.goto(self.fb_notifications_url, timeout=60000)
+            logger.info("✅ Strona FB notifications załadowana")
             await asyncio.sleep(5)
             
             # Check if we're logged in
             login_check = await page.locator('input[name="email"]').count()
             if login_check > 0:
+                logger.warning("⚠️ FB: Sesja wygasła! Wymagane ponowne logowanie")
                 print("⚠️ FB: Sesja wygasła! Uruchom fb_login.py ponownie.")
                 await channel.send("⚠️ **Facebook**: Sesja wygasła! Wymagane ponowne logowanie.")
                 return
@@ -43,6 +49,7 @@ class FacebookScraper:
                 count = await notif_locator.count()
                 
                 if count > 0:
+                    logger.info(f"✅ Znaleziono {count} powiadomień (selector: {selector})")
                     print(f"✅ Znaleziono {count} powiadomień (selector: {selector})")
                     notifications_found = True
                     
@@ -52,6 +59,7 @@ class FacebookScraper:
                             text = await notif.inner_text(timeout=5000)
                             
                             if "iphone" in text.lower():
+                                logger.info(f"🎯 FB: Trafienie! Znaleziono iPhone w powiadomieniu")
                                 print(f"🎯 FB: Trafienie! Znaleziono iPhone w powiadomieniu")
                                 
                                 embed = discord.Embed(
@@ -62,6 +70,7 @@ class FacebookScraper:
                                 embed.description = f"Treść: {text[:300]}..."
                                 embed.set_footer(text="Sprawdź dzwoneczek na FB")
                                 await channel.send(embed=embed)
+                                logger.info("✅ Wysłano powiadomienie FB na Discord")
                                 print("   ✅ Wysłano powiadomienie FB")
                                 
                                 # Try to click and get more details
@@ -81,9 +90,11 @@ class FacebookScraper:
                     break
             
             if not notifications_found:
+                logger.warning("⚠️ FB: Nie znaleziono powiadomień (możliwe zmiany w strukturze FB)")
                 print("⚠️ FB: Nie znaleziono powiadomień (możliwe zmiany w strukturze FB)")
                 
         except Exception as e: 
+            logger.error(f"❌ FB Error: {e}")
             print(f"❌ FB Error: {e}")
         finally: 
             await page.close()
