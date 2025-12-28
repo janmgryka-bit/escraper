@@ -8,8 +8,11 @@ import re
 logger = logging.getLogger('escraper.fb')
 
 class FacebookScraper:
-    def __init__(self, database):
+    def __init__(self, database, config_loader, profit_calculator, ai_analyzer=None):
         self.db = database
+        self.config = config_loader
+        self.profit_calc = profit_calculator
+        self.ai = ai_analyzer
         self.fb_notifications_url = "https://www.facebook.com/notifications"
         self.fb_marketplace_url = "https://www.facebook.com/marketplace/warsaw/search?query=iphone&exact=false"
     
@@ -84,10 +87,14 @@ class FacebookScraper:
             ]
             
             notifications_found = False
-            checked = 0
-            sent = 0
-            skipped_duplicate = 0
-            skipped_irrelevant = 0
+            stats = {
+                'checked': 0,
+                'sent': 0,
+                'skipped_duplicate': 0,
+                'skipped_irrelevant': 0,
+                'skipped_model': 0,
+                'skipped_not_profitable': 0
+            }
             
             for selector in notification_selectors:
                 notif_locator = page.locator(selector)
@@ -100,13 +107,13 @@ class FacebookScraper:
                     # Sprawdź max 10 najnowszych powiadomień
                     for i in range(min(count, 10)):
                         try:
-                            checked += 1
+                            stats['checked'] += 1
                             notif = notif_locator.nth(i)
                             text = await notif.inner_text(timeout=5000)
                             
                             # Sprawdź czy to powiadomienie z grupy
                             if "w grupie" not in text.lower() and "group" not in text.lower():
-                                skipped_irrelevant += 1
+                                stats['skipped_irrelevant'] += 1
                                 continue
                             
                             # Wyciągnij nazwę grupy i preview
@@ -118,21 +125,25 @@ class FacebookScraper:
                             
                             # Sprawdź czy już było w bazie
                             if self.db.fb_notification_exists(notification_id):
-                                skipped_duplicate += 1
+                                stats['skipped_duplicate'] += 1
                                 logger.debug(f"🔄 Duplikat FB: {group_name} - {preview[:30]}...")
                                 continue
                             
                             # Sprawdź czy zawiera "iphone"
                             if "iphone" not in text.lower():
-                                skipped_irrelevant += 1
+                                stats['skipped_irrelevant'] += 1
                                 continue
                             
-                            logger.info(f"🎯 FB: Nowe powiadomienie! Grupa: {group_name}")
-                            logger.info(f"   Preview: {preview[:50]}...")
+                            # Sprawdź czy model jest włączony
+                            if not self.config.is_model_enabled(text):
+                                stats['skipped_model'] += 1
+                                logger.debug(f"🚫 Model wyłączony: {text[:30]}")
+                                continue
                             
                             # Kliknij w powiadomienie żeby otworzyć post
                             post_url = self.fb_notifications_url
                             full_content = preview
+                            price_val = 0
                             
                             try:
                                 # Spróbuj kliknąć i przejść do posta
@@ -170,27 +181,69 @@ class FacebookScraper:
                                     
                             except Exception as e:
                                 logger.debug(f"   ⚠️ Nie udało się otworzyć posta: {e}")
-                                # Kontynuuj z preview
+                            
+                            # Spróbuj wyciągnąć cenę z treści
+                            import re
+                            price_match = re.search(r'(\d+)\s*z[łl]', full_content, re.IGNORECASE)
+                            if price_match:
+                                price_val = int(price_match.group(1))
+                            
+                            # KALKULACJA OPŁACALNOŚCI (jeśli znaleziono cenę)
+                            profit_result = None
+                            if price_val > 0:
+                                profit_result = self.profit_calc.calculate(full_content, price_val, full_content)
+                                
+                                # Sprawdź czy wysyłać
+                                discord_config = self.config.get_discord_config()
+                                should_send = discord_config['send_all'] or (profit_result and profit_result.get('is_profitable'))
+                                
+                                if not should_send and profit_result:
+                                    stats['skipped_not_profitable'] += 1
+                                    logger.info(f"💸 FB Nieopłacalne: {group_name} | {profit_result.get('recommendation', '')}")
+                                    continue
+                            
+                            logger.info(f"🎯 FB: Nowe powiadomienie! Grupa: {group_name}")
+                            if profit_result:
+                                logger.info(f"   {profit_result.get('recommendation', '')}")
                             
                             # Wyślij na Discord
+                            discord_config = self.config.get_discord_config()
+                            # Wybierz kolor
+                            if profit_result and profit_result.get('is_profitable'):
+                                color = discord_config['colors']['profitable']
+                            else:
+                                color = discord_config['colors']['maybe']
+                            
                             embed = discord.Embed(
                                 title=f"🔵 Facebook - {group_name}", 
                                 url=post_url, 
-                                color=discord.Color.blue()
+                                color=color
                             )
                             
-                            # Ogranicz treść do 1000 znaków (limit Discord)
-                            content_display = full_content[:1000]
-                            if len(full_content) > 1000:
+                            # Ogranicz treść
+                            content_display = full_content[:500]
+                            if len(full_content) > 500:
                                 content_display += "..."
                             
                             embed.description = content_display
-                            embed.add_field(name="Grupa", value=group_name, inline=False)
-                            embed.set_footer(text="Facebook Group Notification")
+                            embed.add_field(name="📍 Grupa", value=group_name, inline=False)
+                            
+                            # Dodaj kalkulację jeśli jest
+                            if profit_result and discord_config['send_profit_calc']:
+                                profit_text = (
+                                    f"**Cena:** {price_val} zł\n"
+                                    f"**Model:** {profit_result.get('model', 'Nieznany')}\n"
+                                    f"**Stan:** {profit_result.get('condition', 'Nieznany')}\n"
+                                    f"**Zysk:** {profit_result.get('potential_profit', 0)} zł\n"
+                                    f"**Ocena:** {profit_result.get('recommendation', '')}"
+                                )
+                                embed.add_field(name="📈 Kalkulacja", value=profit_text, inline=False)
+                            
+                            embed.set_footer(text="Facebook • Janek Hunter v6.0")
                             
                             try:
                                 await channel.send(embed=embed)
-                                sent += 1
+                                stats['sent'] += 1
                                 logger.info(f"✅ Wysłano powiadomienie FB: {group_name}")
                             except Exception as de:
                                 logger.error(f"❌ Błąd Discord: {de}")
@@ -207,7 +260,14 @@ class FacebookScraper:
             if not notifications_found:
                 logger.warning("⚠️ FB: Nie znaleziono powiadomień (możliwe zmiany w strukturze FB)")
             else:
-                logger.info(f"📈 PODSUMOWANIE FB: Sprawdzono={checked}, Wysłano={sent}, Pominięto: duplikaty={skipped_duplicate}, nieistotne={skipped_irrelevant}")
+                logger.info(
+                    f"📈 PODSUMOWANIE FB: Sprawdzono={stats['checked']}, "
+                    f"Wysłano={stats['sent']}, Pominięto: "
+                    f"duplikaty={stats['skipped_duplicate']}, "
+                    f"model={stats['skipped_model']}, "
+                    f"nieopłacalne={stats['skipped_not_profitable']}, "
+                    f"nieistotne={stats['skipped_irrelevant']}"
+                )
                 
         except Exception as e: 
             logger.error(f"❌ FB Error: {e}")
