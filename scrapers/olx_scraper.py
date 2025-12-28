@@ -209,34 +209,22 @@ class OLXScraper:
                     
                     # AI Analiza (jeśli włączone)
                     if ai_result and discord_config['send_ai_analysis']:
-                        try:
-                            reasoning = ai_result.get('ai_reasoning', 'Brak szczegółów')
-                            # Konwertuj na string jeśli to nie jest string
-                            if not isinstance(reasoning, str):
-                                reasoning = str(reasoning)
-                            
-                            condition_score = ai_result.get('condition_score', 5)
-                            worth_buying = ai_result.get('worth_buying', False)
-                            
-                            ai_text = (
-                                f"**Stan:** {condition_score}/10\n"
-                                f"**Warto:** {'✅ TAK' if worth_buying else '❌ NIE'}\n"
-                                f"**Uwagi:** {reasoning[:100]}..."
-                            )
-                            
-                            # Dodaj analizę zdjęć jeśli jest
-                            image_analysis = ai_result.get('image_analysis')
-                            if image_analysis and isinstance(image_analysis, str):
-                                ai_text += f"\n\n**📸 Analiza zdjęć:**\n{image_analysis[:150]}..."
-                                visible_damages = ai_result.get('visible_damages')
-                                if visible_damages and isinstance(visible_damages, list):
-                                    ai_text += f"\n**Uszkodzenia:** {', '.join(visible_damages)}"
-                                if not ai_result.get('photos_authentic', True):
-                                    ai_text += "\n⚠️ **Zdjęcia mogą być stock photos!**"
-                            
-                            embed.add_field(name="🤖 AI Analiza", value=ai_text, inline=False)
-                        except Exception as ai_err:
-                            logger.warning(f"⚠️ Błąd formatowania AI: {ai_err}")
+                        reasoning = ai_result.get('ai_reasoning', 'Brak szczegółów')
+                        ai_text = (
+                            f"**Stan:** {ai_result.get('condition_score', 5)}/10\n"
+                            f"**Warto:** {'✅ TAK' if ai_result.get('worth_buying', False) else '❌ NIE'}\n"
+                            f"**Uwagi:** {reasoning[:100]}..."
+                        )
+                        
+                        # Dodaj analizę zdjęć jeśli jest
+                        if ai_result.get('image_analysis'):
+                            ai_text += f"\n\n**📸 Analiza zdjęć:**\n{ai_result['image_analysis'][:150]}..."
+                            if ai_result.get('visible_damages'):
+                                ai_text += f"\n**Uszkodzenia:** {', '.join(ai_result['visible_damages'])}"
+                            if not ai_result.get('photos_authentic', True):
+                                ai_text += "\n⚠️ **Zdjęcia mogą być stock photos!**"
+                        
+                        embed.add_field(name="🤖 AI Analiza", value=ai_text, inline=False)
                     
                     # Uszkodzenia (jeśli są)
                     if profit_result['damages']:

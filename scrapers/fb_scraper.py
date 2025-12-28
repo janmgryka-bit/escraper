@@ -150,32 +150,18 @@ class FacebookScraper:
                                 await notif.click(timeout=5000)
                                 await asyncio.sleep(3)
                                 
-                                # Pobierz URL posta
+                                # Pobierz URL posta i wyciągnij ID
                                 current_url = page.url
                                 if "groups" in current_url or "posts" in current_url:
-                                    # Wyciągnij ID posta z URL
-                                    # Format: /groups/{group_id}/posts/{post_id}/ lub /groups/{group_id}/permalink/{post_id}/
                                     import re
+                                    # Szukaj post_id w różnych formatach
+                                    post_match = re.search(r'/posts/(\d+)', current_url) or re.search(r'/permalink/(\d+)', current_url)
+                                    group_match = re.search(r'/groups/(\d+)', current_url)
                                     
-                                    # Spróbuj różne formaty URL
-                                    post_id_match = re.search(r'/posts/(\d+)', current_url) or \
-                                                   re.search(r'/permalink/(\d+)', current_url) or \
-                                                   re.search(r'story_fbid=(\d+)', current_url)
-                                    
-                                    if post_id_match:
-                                        post_id = post_id_match.group(1)
-                                        # Wyciągnij też group_id
-                                        group_id_match = re.search(r'/groups/(\d+)', current_url)
-                                        if group_id_match:
-                                            group_id = group_id_match.group(1)
-                                            post_url = f"https://www.facebook.com/groups/{group_id}/posts/{post_id}/"
-                                        else:
-                                            # Fallback - użyj permalink
-                                            post_url = f"https://www.facebook.com/permalink.php?story_fbid={post_id}"
+                                    if post_match and group_match:
+                                        post_url = f"https://www.facebook.com/groups/{group_match.group(1)}/posts/{post_match.group(1)}/"
                                     else:
-                                        # Fallback - użyj czystego URL bez parametrów
                                         post_url = current_url.split('?')[0]
-                                    
                                     logger.info(f"   📍 Post URL: {post_url}")
                                     
                                     # Poczekaj na załadowanie treści posta
