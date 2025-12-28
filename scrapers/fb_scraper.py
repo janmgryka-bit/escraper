@@ -177,20 +177,38 @@ class FacebookScraper:
                                 continue
                             
                             try:
-                                
                                 # Kliknij w powiadomienie żeby otworzyć post
                                 await notif.click(timeout=5000)
                                 await asyncio.sleep(3)
                                 
+                                # Pobierz rzeczywisty URL po kliknięciu
+                                current_url = page.url
+                                logger.info(f"   📍 Obecny URL: {current_url}")
+                                
+                                # Jeśli post_url nie został wyciągnięty wcześniej, spróbuj teraz
+                                if not post_url and ("groups" in current_url or "posts" in current_url):
+                                    import re
+                                    post_match = re.search(r'/posts/(\d+)', current_url) or re.search(r'/permalink/(\d+)', current_url)
+                                    group_match = re.search(r'/groups/(\d+)', current_url)
+                                    
+                                    if post_match and group_match:
+                                        post_url = f"https://www.facebook.com/groups/{group_match.group(1)}/posts/{post_match.group(1)}/"
+                                        logger.info(f"   ✅ Wyciągnięto post_url z URL: {post_url}")
+                                        
+                                        # Zaktualizuj notification_id jeśli nie było
+                                        if not notification_id:
+                                            notification_id = hashlib.md5(post_url.encode()).hexdigest()
+                                
                                 # Poczekaj na załadowanie treści posta
                                 await asyncio.sleep(3)
                                 
-                                # Spróbuj wyciągnąć PEŁNĄ treść posta (wszystkie div[dir="auto"])
+                                # Spróbuj wyciągnąć PEŁNĄ treść posta
                                 post_selectors = [
                                     'div[data-ad-preview="message"]',
                                     'div[data-ad-comet-preview="message"]',
-                                    'div[role="article"]',
-                                    'div.x11i5rnm'
+                                    'div[role="article"] div[dir="auto"]',
+                                    'div.x11i5rnm',
+                                    'div[data-ad-rendering-role="body"]'
                                 ]
                                 
                                 content_parts = []
@@ -199,7 +217,7 @@ class FacebookScraper:
                                     count = await content_locators.count()
                                     if count > 0:
                                         # Zbierz tekst ze wszystkich pasujących elementów
-                                        for i in range(min(count, 5)):
+                                        for i in range(min(count, 10)):
                                             try:
                                                 text = await content_locators.nth(i).inner_text(timeout=2000)
                                                 if text and len(text) > 20:
@@ -214,13 +232,15 @@ class FacebookScraper:
                                     logger.info(f"   ✅ Zeskanowano treść posta ({len(full_content)} znaków)")
                                 else:
                                     logger.warning(f"   ⚠️ Nie znaleziono treści posta, używam preview")
+                                    full_content = preview
                                 
                                 # Wróć do powiadomień
                                 await page.goto(self.fb_notifications_url)
                                 await asyncio.sleep(2)
                                     
                             except Exception as e:
-                                logger.debug(f"   ⚠️ Nie udało się otworzyć posta: {e}")
+                                logger.warning(f"   ⚠️ Nie udało się otworzyć posta: {e}")
+                                full_content = preview
                             
                             # Spróbuj wyciągnąć cenę z treści (różne formaty)
                             import re
@@ -314,8 +334,9 @@ class FacebookScraper:
                             except Exception as de:
                                 logger.error(f"❌ Błąd Discord: {de}")
                             
-                            # Zapisz do bazy
+                            # Zapisz do bazy (z pełną treścią i poprawnym URL)
                             self.db.add_fb_notification(notification_id, group_name, full_content, post_url)
+                            logger.debug(f"   💾 Zapisano do bazy: {notification_id[:8]}... | URL: {post_url}")
                             
                         except Exception as e:
                             logger.debug(f"⚠️ Błąd przetwarzania powiadomienia: {e}")
