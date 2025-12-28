@@ -135,6 +135,7 @@ class FacebookScraper:
                             notification_id = None
                             full_content = preview
                             price_val = 0
+                            is_duplicate = False
                             
                             try:
                                 import re
@@ -158,16 +159,24 @@ class FacebookScraper:
                                         # Sprawdź czy już było w bazie
                                         if self.db.fb_notification_exists(notification_id):
                                             stats['skipped_duplicate'] += 1
-                                            logger.debug(f"🔄 Duplikat FB: {post_url}")
-                                            continue
+                                            logger.info(f"🔄 Duplikat FB (pomijam): {post_url}")
+                                            is_duplicate = True
                                 
                                 # Fallback - jeśli nie ma post_url, użyj starej metody
                                 if not notification_id:
                                     notification_id = self._create_notification_id(group_name, preview)
                                     if self.db.fb_notification_exists(notification_id):
                                         stats['skipped_duplicate'] += 1
-                                        logger.debug(f"🔄 Duplikat FB (fallback): {group_name}")
-                                        continue
+                                        logger.info(f"🔄 Duplikat FB (fallback, pomijam): {group_name}")
+                                        is_duplicate = True
+                            except Exception as e:
+                                logger.debug(f"   ⚠️ Błąd wyciągania URL: {e}")
+                            
+                            # Pomiń jeśli duplikat
+                            if is_duplicate:
+                                continue
+                            
+                            try:
                                 
                                 # Kliknij w powiadomienie żeby otworzyć post
                                 await notif.click(timeout=5000)
