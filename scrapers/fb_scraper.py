@@ -71,12 +71,11 @@ class FacebookScraper:
             logger.info("✅ Strona FB notifications załadowana")
             await asyncio.sleep(3)
             
-            # Sprawdź czy zalogowany
+            # Sprawdź czy zalogowany (tylko loguj, nie przerywaj)
             login_check = await page.locator('input[name="email"]').count()
             if login_check > 0:
-                logger.warning("⚠️ FB: Sesja wygasła! Wymagane ponowne logowanie")
-                await channel.send("⚠️ **Facebook**: Sesja wygasła! Uruchom `python fb_login.py`")
-                return
+                logger.debug("⚠️ FB: Wykryto formularz logowania, ale kontynuuję (persistent context)")
+                # Nie przerywaj - persistent context powinien mieć sesję
             
             # Próbuj różne selektory dla powiadomień
             notification_selectors = [
@@ -170,39 +169,37 @@ class FacebookScraper:
                                 
                                 # Spróbuj wyciągnąć PEŁNĄ treść posta (wszystkie div[dir="auto"])
                                 post_selectors = [
-                                        'div[data-ad-preview="message"]',
-                                        'div[data-ad-comet-preview="message"]',
-                                        'div[role="article"]',
-                                        'div.x11i5rnm'
-                                    ]
-                                    
-                                    content_parts = []
-                                    for post_selector in post_selectors:
-                                        content_locators = page.locator(post_selector)
-                                        count = await content_locators.count()
-                                        if count > 0:
-                                            # Zbierz tekst ze wszystkich pasujących elementów
-                                            for i in range(min(count, 5)):
-                                                try:
-                                                    text = await content_locators.nth(i).inner_text(timeout=2000)
-                                                    if text and len(text) > 20:
-                                                        content_parts.append(text)
-                                                except:
-                                                    continue
-                                            if content_parts:
-                                                break
-                                    
-                                    if content_parts:
-                                        full_content = "\n\n".join(content_parts)
-                                        logger.info(f"   ✅ Zeskanowano treść posta ({len(full_content)} znaków)")
-                                    else:
-                                        logger.warning(f"   ⚠️ Nie znaleziono treści posta, używam preview")
-                                    
-                                    # Wróć do powiadomień
-                                    await page.goto(self.fb_notifications_url)
-                                    await asyncio.sleep(2)
+                                    'div[data-ad-preview="message"]',
+                                    'div[data-ad-comet-preview="message"]',
+                                    'div[role="article"]',
+                                    'div.x11i5rnm'
+                                ]
+                                
+                                content_parts = []
+                                for post_selector in post_selectors:
+                                    content_locators = page.locator(post_selector)
+                                    count = await content_locators.count()
+                                    if count > 0:
+                                        # Zbierz tekst ze wszystkich pasujących elementów
+                                        for i in range(min(count, 5)):
+                                            try:
+                                                text = await content_locators.nth(i).inner_text(timeout=2000)
+                                                if text and len(text) > 20:
+                                                    content_parts.append(text)
+                                            except:
+                                                continue
+                                        if content_parts:
+                                            break
+                                
+                                if content_parts:
+                                    full_content = "\n\n".join(content_parts)
+                                    logger.info(f"   ✅ Zeskanowano treść posta ({len(full_content)} znaków)")
                                 else:
-                                    logger.warning(f"   ⚠️ Nie udało się przejść do posta, URL: {current_url}")
+                                    logger.warning(f"   ⚠️ Nie znaleziono treści posta, używam preview")
+                                
+                                # Wróć do powiadomień
+                                await page.goto(self.fb_notifications_url)
+                                await asyncio.sleep(2)
                                     
                             except Exception as e:
                                 logger.debug(f"   ⚠️ Nie udało się otworzyć posta: {e}")
