@@ -140,29 +140,30 @@ class FacebookScraper:
                                 logger.debug(f"🚫 Model wyłączony: {text[:30]}")
                                 continue
                             
-                            # Kliknij w powiadomienie żeby otworzyć post
+                            # Wyciągnij link do posta PRZED kliknięciem
                             post_url = None
                             full_content = preview
                             price_val = 0
                             
                             try:
-                                # Spróbuj kliknąć i przejść do posta
-                                await notif.click(timeout=5000)
-                                await asyncio.sleep(3)
+                                import re
+                                # Spróbuj znaleźć link w powiadomieniu (href)
+                                notif_html = await notif.inner_html()
+                                href_match = re.search(r'href="([^"]*(?:/posts/|/permalink/|story_fbid=)[^"]*)"', notif_html)
                                 
-                                # Pobierz URL posta i wyciągnij ID
-                                current_url = page.url
-                                if "groups" in current_url or "posts" in current_url:
-                                    import re
-                                    # Szukaj post_id w różnych formatach
-                                    post_match = re.search(r'/posts/(\d+)', current_url) or re.search(r'/permalink/(\d+)', current_url)
-                                    group_match = re.search(r'/groups/(\d+)', current_url)
+                                if href_match:
+                                    raw_url = href_match.group(1).replace('&amp;', '&')
+                                    # Wyciągnij post_id i group_id
+                                    post_match = re.search(r'/posts/(\d+)', raw_url) or re.search(r'/permalink/(\d+)', raw_url) or re.search(r'story_fbid=(\d+)', raw_url)
+                                    group_match = re.search(r'/groups/(\d+)', raw_url)
                                     
                                     if post_match and group_match:
                                         post_url = f"https://www.facebook.com/groups/{group_match.group(1)}/posts/{post_match.group(1)}/"
-                                    else:
-                                        post_url = current_url.split('?')[0]
-                                    logger.info(f"   📍 Post URL: {post_url}")
+                                        logger.info(f"   📍 Post URL: {post_url}")
+                                
+                                # Kliknij w powiadomienie żeby otworzyć post
+                                await notif.click(timeout=5000)
+                                await asyncio.sleep(3)
                                     
                                     # Poczekaj na załadowanie treści posta
                                     await asyncio.sleep(3)
