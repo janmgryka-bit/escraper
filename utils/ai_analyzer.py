@@ -50,9 +50,12 @@ class AIAnalyzer:
             logger.warning(f"⚠️ Nieznany provider AI: {provider} - AI wyłączone")
             self.enabled = False
     
-    def analyze_offer(self, model, price, title, description=""):
+    def analyze_offer(self, model, price, title, description="", image_urls=None):
         """
-        Analizuje ofertę używając AI.
+        Analizuje ofertę używając AI (tekst + opcjonalnie zdjęcia).
+        
+        Args:
+            image_urls: Lista URL-i do zdjęć (opcjonalne)
         
         Returns:
             dict: {
@@ -61,9 +64,22 @@ class AIAnalyzer:
                 'is_scam': bool,
                 'estimated_profit': int,
                 'worth_buying': bool,
-                'ai_reasoning': str
+                'ai_reasoning': str,
+                'image_analysis': str (jeśli są zdjęcia)
             }
         """
+        if not self.enabled:
+            return None
+        
+        # Sprawdź czy analizować zdjęcia
+        analyze_images = self.ai_config['checks'].get('analyze_images', False)
+        if image_urls and analyze_images:
+            return self._analyze_with_images(model, price, title, description, image_urls)
+        else:
+            return self._analyze_text_only(model, price, title, description)
+    
+    def _analyze_text_only(self, model, price, title, description):
+        """Analiza tylko tekstu (bez zdjęć)"""
         if not self.enabled:
             return None
         
@@ -135,8 +151,127 @@ class AIAnalyzer:
                 }
         
         except Exception as e:
-            logger.error(f"❌ Błąd AI: {e}")
+            logger.error(f"❌ Błąd AI (text): {e}")
             return None
+    
+    def _analyze_with_images(self, model, price, title, description, image_urls):
+        """
+        Analiza z użyciem zdjęć (wymaga vision model).
+        Groq: llama-3.2-90b-vision-preview
+        OpenAI: gpt-4-vision-preview
+        """
+        if not self.enabled:
+            return None
+        
+        try:
+            provider = self.ai_config['provider']
+            
+            # Przygotuj prompt z informacją o zdjęciach
+            prompt = f"""
+Jesteś ekspertem od iPhone'ów. Przeanalizuj ofertę na podstawie opisu I ZDJĘĆ:
+
+Model: {model}
+Cena: {price} zł
+Opis: {title}\n{description}
+
+Przeanalizuj zdjęcia i oceń:
+1. Rzeczywisty stan telefonu (1-10)
+2. Widoczne uszkodzenia (ekran, obudowa, etc.)
+3. Czy zdjęcia są autentyczne (nie stock photos)
+4. Czy to może być oszustwo
+5. Czy warto kupić
+
+Odpowiedź w formacie JSON:
+{{
+  "condition_score": 1-10,
+  "visible_damages": ["lista uszkodzeń"],
+  "photos_authentic": true/false,
+  "is_scam": true/false,
+  "worth_buying": true/false,
+  "image_analysis": "szczegółowa analiza zdjęć",
+  "reasoning": "uzasadnienie"
+}}
+"""
+            
+            if provider == 'groq':
+                # Groq vision model
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt}
+                        ]
+                    }
+                ]
+                
+                # Dodaj zdjęcia (max 3)
+                for img_url in image_urls[:3]:
+                    messages[0]["content"].append({
+                        "type": "image_url",
+                        "image_url": {"url": img_url}
+                    })
+                
+                response = self.client.chat.completions.create(
+                    model="llama-3.2-90b-vision-preview",
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=800
+                )
+                ai_response = response.choices[0].message.content
+            
+            elif provider == 'openai':
+                # OpenAI vision model
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt}
+                        ]
+                    }
+                ]
+                
+                for img_url in image_urls[:3]:
+                    messages[0]["content"].append({
+                        "type": "image_url",
+                        "image_url": {"url": img_url}
+                    })
+                
+                response = self.client.chat.completions.create(
+                    model="gpt-4-vision-preview",
+                    messages=messages,
+                    max_tokens=800
+                )
+                ai_response = response.choices[0].message.content
+            else:
+                logger.warning(f"⚠️ Provider {provider} nie obsługuje vision")
+                return self._analyze_text_only(model, price, title, description)
+            
+            # Parsuj JSON
+            if '```json' in ai_response:
+                ai_response = ai_response.split('```json')[1].split('```')[0]
+            elif '```' in ai_response:
+                ai_response = ai_response.split('```')[1].split('```')[0]
+            
+            result = json.loads(ai_response.strip())
+            
+            # Znormalizuj odpowiedź
+            return {
+                'is_good_deal': result.get('worth_buying', False),
+                'condition_score': result.get('condition_score', 5),
+                'is_scam': result.get('is_scam', False),
+                'estimated_profit': 0,
+                'worth_buying': result.get('worth_buying', False),
+                'ai_reasoning': result.get('reasoning', ''),
+                'image_analysis': result.get('image_analysis', ''),
+                'visible_damages': result.get('visible_damages', []),
+                'photos_authentic': result.get('photos_authentic', True)
+            }
+        
+        except Exception as e:
+            logger.error(f"❌ Błąd AI (vision): {e}")
+            # Fallback do analizy tekstowej
+            logger.info("⚠️ Fallback do analizy tekstowej")
+            return self._analyze_text_only(model, price, title, description)
     
     def analyze_smart_match(self, offer1, offer2, combined_profit):
         """

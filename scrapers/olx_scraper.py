@@ -58,11 +58,14 @@ class OLXScraper:
                 'checked': 0,
                 'sent': 0,
                 'skipped_no_price': 0,
+                'skipped_budget': 0,
                 'skipped_duplicate': 0,
                 'skipped_model': 0,
                 'skipped_not_profitable': 0,
                 'skipped_ai': 0
             }
+            
+            max_budget = self.config.get_max_budget()
             
             # Lista ofert do smart matching
             all_offers = []
@@ -79,6 +82,12 @@ class OLXScraper:
                     
                     price_text = await price_el.inner_text()
                     price_val = int(''.join(filter(str.isdigit, price_text.split(',')[0])))
+                    
+                    # Sprawdź budżet
+                    if price_val > max_budget:
+                        stats['skipped_budget'] += 1
+                        logger.debug(f"💰 Poza budżetem: {price_val}zł > {max_budget}zł")
+                        continue
                     
                     # Pobierz URL
                     link_el = offer.locator('a').first
@@ -115,6 +124,20 @@ class OLXScraper:
                     profit_result['full_text'] = full_text
                     all_offers.append(profit_result)
                     
+                    # Wyciągnij URL-e zdjęć (jeśli AI ma analizować obrazy)
+                    image_urls = []
+                    if self.ai and self.ai.enabled and self.ai.ai_config['checks'].get('analyze_images', False):
+                        try:
+                            img_elements = await offer.locator('img').all()
+                            for img in img_elements[:3]:  # Max 3 zdjęcia
+                                img_src = await img.get_attribute('src')
+                                if img_src and 'http' in img_src:
+                                    image_urls.append(img_src)
+                            if image_urls:
+                                logger.debug(f"📸 Znaleziono {len(image_urls)} zdjęć dla AI")
+                        except Exception as e:
+                            logger.debug(f"⚠️ Nie udało się pobrać zdjęć: {e}")
+                    
                     # AI Analiza (opcjonalne)
                     ai_result = None
                     if self.ai and self.ai.enabled:
@@ -122,7 +145,8 @@ class OLXScraper:
                             profit_result['model'],
                             price_val,
                             title,
-                            full_text
+                            full_text,
+                            image_urls=image_urls if image_urls else None
                         )
                         
                         # Jeśli AI wykryło oszustwo, pomiń
@@ -185,6 +209,15 @@ class OLXScraper:
                             f"**Warto:** {'✅ TAK' if ai_result['worth_buying'] else '❌ NIE'}\n"
                             f"**Uwagi:** {ai_result['ai_reasoning'][:100]}..."
                         )
+                        
+                        # Dodaj analizę zdjęć jeśli jest
+                        if ai_result.get('image_analysis'):
+                            ai_text += f"\n\n**📸 Analiza zdjęć:**\n{ai_result['image_analysis'][:150]}..."
+                            if ai_result.get('visible_damages'):
+                                ai_text += f"\n**Uszkodzenia:** {', '.join(ai_result['visible_damages'])}"
+                            if not ai_result.get('photos_authentic', True):
+                                ai_text += "\n⚠️ **Zdjęcia mogą być stock photos!**"
+                        
                         embed.add_field(name="🤖 AI Analiza", value=ai_text, inline=False)
                     
                     # Uszkodzenia (jeśli są)
@@ -224,6 +257,7 @@ class OLXScraper:
             logger.info(
                 f"📈 PODSUMOWANIE OLX: Sprawdzono={stats['checked']}, "
                 f"Wysłano={stats['sent']}, Pominięto: "
+                f"budżet={stats['skipped_budget']}, "
                 f"duplikaty={stats['skipped_duplicate']}, "
                 f"model={stats['skipped_model']}, "
                 f"nieopłacalne={stats['skipped_not_profitable']}, "

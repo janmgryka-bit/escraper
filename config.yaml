@@ -44,7 +44,7 @@ conditions:
   uszkodzony: true      # Uszkodzony ekran, obudowa, etc.
   zablokowany: true     # Zablokowany iCloud
   uzywany: true         # Używany, sprawny
-  nowy: true            # Nowy, nieużywany
+  nowy: false            # Nowy, nieużywany
   na_czesci: true       # Na części
   
 # Ceny rynkowe i widelki zysku (zł)
@@ -230,15 +230,16 @@ smart_matching:
 
 # AI Analiza (opcjonalne)
 ai:
-  enabled: false  # Włącz/wyłącz AI
+  enabled: true  # Włącz/wyłącz AI
   provider: "groq"  # groq, openai, ollama
-  model: "llama-3.1-70b-versatile"
+  model: "llama-3.3-70b-versatile"  # Aktualny model (grudzień 2024)
   
   # Co AI ma sprawdzać
   checks:
     analyze_description: true    # Analizuj opis oferty
+    analyze_images: true         # Analizuj zdjęcia (wymaga vision model)
     detect_scam: true            # Wykrywaj oszustwa
-    estimate_condition: true     # Oceń stan na podstawie opisu
+    estimate_condition: true     # Oceń stan na podstawie opisu i zdjęć
     suggest_price: true          # Zaproponuj cenę
     calculate_profit: true       # Policz potencjalny zysk
     
