@@ -56,12 +56,24 @@ async def main_loop():
 
     async with async_playwright() as p:
         logger.info("🌐 Uruchamianie przeglądarki Chromium...")
-        context = await p.chromium.launch_persistent_context(
-            'fb_data',
-            headless=True,
-            user_agent=USER_AGENT
-        )
-        logger.info("✅ Przeglądarka gotowa")
+        try:
+            context = await p.chromium.launch_persistent_context(
+                'fb_data',
+                headless=True,
+                user_agent=USER_AGENT,
+                executable_path='/usr/bin/chromium',
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu'
+                ]
+            )
+            logger.info("✅ Przeglądarka gotowa (system Chromium)")
+        except Exception as e:
+            logger.error(f"❌ Błąd uruchamiania przeglądarki: {e}")
+            logger.error("💡 Sprawdź czy Chromium jest zainstalowany: sudo apt install chromium-browser")
+            raise
         
         cycle = 0
         while True:
