@@ -237,7 +237,7 @@ ai:
   # Co AI ma sprawdzać
   checks:
     analyze_description: true    # Analizuj opis oferty
-    analyze_images: true         # Analizuj zdjęcia (wymaga vision model)
+    analyze_images: false         # Analizuj zdjęcia (wymaga vision model)
     detect_scam: true            # Wykrywaj oszustwa
     estimate_condition: true     # Oceń stan na podstawie opisu i zdjęć
     suggest_price: true          # Zaproponuj cenę

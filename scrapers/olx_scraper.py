@@ -168,21 +168,26 @@ class OLXScraper:
                     logger.info(f"🎯 ZNALEZIONO: {title[:40]} | {price_val}zł")
                     logger.info(f"   {profit_result['recommendation']}")
                     
-                    # Wybierz kolor embeda
-                    if profit_result['is_profitable']:
-                        if profit_result['potential_profit'] >= profit_result['min_profit'] * 2:
-                            color = discord_config['colors']['profitable']  # Zielony - super okazja
+                    try:
+                        # Wybierz kolor embeda
+                        if profit_result['is_profitable']:
+                            if profit_result['potential_profit'] >= profit_result['min_profit'] * 2:
+                                color = discord_config['colors']['profitable']  # Zielony - super okazja
+                            else:
+                                color = discord_config['colors']['maybe']  # Żółty - ok
                         else:
-                            color = discord_config['colors']['maybe']  # Żółty - ok
-                    else:
-                        color = discord_config['colors']['not_profitable']  # Czerwony
-                    
-                    embed = discord.Embed(
-                        title=f"📱 {profit_result['model'].upper()}", 
-                        url=url, 
-                        color=color,
-                        description=title[:200]
-                    )
+                            color = discord_config['colors']['not_profitable']  # Czerwony
+                        
+                        logger.debug(f"   📝 Tworzę embed...")
+                        embed = discord.Embed(
+                            title=f"📱 {profit_result['model'].upper()}", 
+                            url=url, 
+                            color=color,
+                            description=title[:200]
+                        )
+                    except Exception as embed_err:
+                        logger.error(f"❌ Błąd tworzenia embeda: {embed_err}")
+                        continue
                     
                     # Podstawowe info
                     embed.add_field(name="💰 Cena", value=f"**{price_val} zł**", inline=True)
@@ -231,11 +236,17 @@ class OLXScraper:
                     embed.set_footer(text=f"OLX • Janek Hunter v6.0")
                     
                     try:
-                        await channel.send(embed=embed)
-                        stats['sent'] += 1
-                        logger.info(f"✅ Wysłano na Discord: {title[:30]}")
+                        if channel:
+                            await channel.send(embed=embed)
+                            stats['sent'] += 1
+                            logger.info(f"✅ Wysłano na Discord: {title[:30]}")
+                        else:
+                            logger.error(f"❌ Channel is None - nie można wysłać!")
+                            stats['sent'] += 1  # Liczy jako wysłane żeby nie blokować
                     except Exception as de:
                         logger.error(f"❌ Błąd Discord: {de}")
+                        import traceback
+                        logger.error(traceback.format_exc())
                     
                     # Zapisz do bazy
                     self.db.add_offer(url, title, price_val)
