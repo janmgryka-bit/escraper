@@ -13,6 +13,7 @@ from utils.profitability import ProfitabilityCalculator
 from utils.ai_analyzer import AIAnalyzer
 from scrapers.olx_scraper import OLXScraper
 from scrapers.fb_scraper import FacebookScraper
+from scrapers.allegro_scraper import AllegroScraper
 
 logger = setup_logger()
 
@@ -85,6 +86,12 @@ async def main_loop():
                 
                 await fb_scraper.check_notifications(context, channel)
                 await olx_scraper.scrape(context, channel)
+                
+                # Allegro Lokalnie (jeśli włączone)
+                allegro_config = config.config.get('sources', {}).get('allegro_lokalnie', {})
+                if allegro_config.get('enabled', False):
+                    await allegro_scraper.scrape(context, channel)
+                
                 logger.info(f"✅ Cykl #{cycle} zakończony pomyślnie")
             except Exception as e:
                 logger.error(f"⚠️ Błąd w głównej pętli (cykl #{cycle}): {e}")

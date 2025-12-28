@@ -278,5 +278,7 @@ discord:
 sources:
   olx: true
   facebook: true
-  allegro: false  # TODO: do zaimplementowania
+  allegro_lokalnie:
+    enabled: true
+    url: "https://allegrolokalnie.pl/oferty/q/iphone"  # Ustaw swoje filtry w przeglądarce i skopiuj URL
   vinted: false   # TODO: do zaimplementowania
