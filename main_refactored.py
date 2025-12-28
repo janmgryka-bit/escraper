@@ -18,7 +18,7 @@ bot = discord.Client(intents=intents)
 
 db = Database()
 olx_scraper = OLXScraper(MAX_BUDGET, db)
-fb_scraper = FacebookScraper()
+fb_scraper = FacebookScraper(db)
 
 async def main_loop():
     await bot.wait_until_ready()
