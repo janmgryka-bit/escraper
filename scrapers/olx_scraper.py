@@ -6,15 +6,37 @@ import logging
 logger = logging.getLogger('escraper.olx')
 
 class OLXScraper:
-    def __init__(self, max_budget, database):
-        self.max_budget = max_budget
+    def __init__(self, database, config_loader, profit_calculator, ai_analyzer=None):
         self.db = database
-        self.olx_url = (
-            "https://www.olx.pl/elektronika/telefony/smartfony-telefony-komorkowe/warszawa/"
-            "q-iphone/?search%5Bdist%5D=50&search%5Bprivate_business%5D=private"
-            "&search%5Border%5D=created_at:desc&search%5Bfilter_enum_state%5D%5B0%5D=damaged"
-            "&search%5Bfilter_enum_state%5D%5B1%5D=used"
-        )
+        self.config = config_loader
+        self.profit_calc = profit_calculator
+        self.ai = ai_analyzer
+        
+        # Buduj URL OLX na podstawie konfiguracji
+        self.olx_url = self._build_olx_url()
+    
+    def _build_olx_url(self):
+        """Buduje URL OLX na podstawie konfiguracji stanów"""
+        base_url = "https://www.olx.pl/elektronika/telefony/smartfony-telefony-komorkowe/warszawa/q-iphone/"
+        params = [
+            "search%5Bdist%5D=50",
+            "search%5Bprivate_business%5D=private",
+            "search%5Border%5D=created_at:desc"
+        ]
+        
+        # Dodaj filtry stanów
+        conditions = self.config.get_enabled_conditions()
+        state_filters = []
+        
+        if 'uszkodzony' in conditions or 'na_czesci' in conditions:
+            state_filters.append("search%5Bfilter_enum_state%5D%5B0%5D=damaged")
+        if 'uzywany' in conditions:
+            state_filters.append("search%5Bfilter_enum_state%5D%5B1%5D=used")
+        if 'nowy' in conditions:
+            state_filters.append("search%5Bfilter_enum_state%5D%5B2%5D=new")
+        
+        params.extend(state_filters)
+        return base_url + "?" + "&".join(params)
     
     async def scrape(self, context, channel):
         page = await context.new_page()
@@ -22,7 +44,7 @@ class OLXScraper:
         
         try:
             logger.info("🔍 Rozpoczynam skanowanie OLX...")
-            print(f"📡 [{datetime.now().strftime('%H:%M')}] Skanowanie OLX (Top 25)...")
+            logger.info(f"🔗 URL: {self.olx_url}")
             
             await page.goto(self.olx_url, wait_until="commit", timeout=30000)
             logger.info("✅ Strona OLX załadowana")
@@ -31,79 +53,229 @@ class OLXScraper:
             offers = await page.locator('div[data-cy="l-card"]').all()
             logger.info(f"📊 Znaleziono {len(offers)} ogłoszeń na stronie")
             
-            checked = 0
-            skipped_price = 0
-            skipped_budget = 0
-            skipped_duplicate = 0
-            skipped_old = 0
-            sent = 0
+            # Statystyki
+            stats = {
+                'checked': 0,
+                'sent': 0,
+                'skipped_no_price': 0,
+                'skipped_duplicate': 0,
+                'skipped_model': 0,
+                'skipped_not_profitable': 0,
+                'skipped_ai': 0
+            }
+            
+            # Lista ofert do smart matching
+            all_offers = []
             
             for offer in offers[:25]:
                 try:
-                    checked += 1
+                    stats['checked'] += 1
+                    
+                    # Pobierz cenę
                     price_el = offer.locator('p[data-testid="ad-price"]')
                     if await price_el.count() == 0:
-                        skipped_price += 1
+                        stats['skipped_no_price'] += 1
                         continue
                     
                     price_text = await price_el.inner_text()
                     price_val = int(''.join(filter(str.isdigit, price_text.split(',')[0])))
                     
-                    if price_val > self.max_budget:
-                        skipped_budget += 1
-                        logger.debug(f"⏭️  Pominięto: {price_val}zł > {self.max_budget}zł")
-                        continue
-                    
+                    # Pobierz URL
                     link_el = offer.locator('a').first
                     raw_href = await link_el.get_attribute('href')
                     url = ("https://www.olx.pl" + raw_href if "olx.pl" not in raw_href else raw_href).split('#')[0]
                     
+                    # Sprawdź duplikaty
                     if self.db.offer_exists(url):
-                        skipped_duplicate += 1
+                        stats['skipped_duplicate'] += 1
                         logger.debug(f"🔄 Duplikat: {url[:50]}...")
                         continue
                     
+                    # Pobierz tytuł i opis
                     full_text = await offer.inner_text()
-                    title = full_text.split('\n')[0].lower()
+                    title = full_text.split('\n')[0]
                     
-                    if any(x in title for x in ['iphone 7', 'iphone 8', 'iphone x', 'se 2016']):
-                        skipped_old += 1
-                        logger.info(f"🚫 Pomijam stary model: {title[:30]}")
-                        print(f"   🚫 Pomijam stary model: {title[:20]}")
+                    # Sprawdź czy model jest włączony
+                    if not self.config.is_model_enabled(title):
+                        stats['skipped_model'] += 1
+                        logger.debug(f"🚫 Model wyłączony: {title[:30]}")
                         continue
                     
-                    logger.info(f"🎯 NOWA OKAZJA: {title[:40]} | {price_val}zł")
-                    print(f"🎯 OKAZJA! Próba wysyłki: {title[:30]} | {price_val}zł")
+                    # KALKULACJA OPŁACALNOŚCI
+                    profit_result = self.profit_calc.calculate(title, price_val, full_text)
+                    
+                    if not profit_result.get('model'):
+                        stats['skipped_model'] += 1
+                        logger.debug(f"❓ Nieznany model: {title[:30]}")
+                        continue
+                    
+                    # Dodaj do listy dla smart matching
+                    profit_result['url'] = url
+                    profit_result['title'] = title
+                    profit_result['full_text'] = full_text
+                    all_offers.append(profit_result)
+                    
+                    # AI Analiza (opcjonalne)
+                    ai_result = None
+                    if self.ai and self.ai.enabled:
+                        ai_result = self.ai.analyze_offer(
+                            profit_result['model'],
+                            price_val,
+                            title,
+                            full_text
+                        )
+                        
+                        # Jeśli AI wykryło oszustwo, pomiń
+                        if ai_result and ai_result.get('is_scam'):
+                            stats['skipped_ai'] += 1
+                            logger.warning(f"⚠️ AI wykryło oszustwo: {title[:30]}")
+                            continue
+                    
+                    # Sprawdź czy wysyłać (tylko opłacalne lub wszystkie)
+                    discord_config = self.config.get_discord_config()
+                    should_send = discord_config['send_all'] or profit_result['is_profitable']
+                    
+                    if not should_send:
+                        stats['skipped_not_profitable'] += 1
+                        logger.info(f"💸 Nieopłacalne: {title[:30]} | {profit_result['recommendation']}")
+                        continue
+                    
+                    # WYŚLIJ NA DISCORD
+                    logger.info(f"🎯 ZNALEZIONO: {title[:40]} | {price_val}zł")
+                    logger.info(f"   {profit_result['recommendation']}")
+                    
+                    # Wybierz kolor embeda
+                    if profit_result['is_profitable']:
+                        if profit_result['potential_profit'] >= profit_result['min_profit'] * 2:
+                            color = discord_config['colors']['profitable']  # Zielony - super okazja
+                        else:
+                            color = discord_config['colors']['maybe']  # Żółty - ok
+                    else:
+                        color = discord_config['colors']['not_profitable']  # Czerwony
                     
                     embed = discord.Embed(
-                        title=f"📱 {title.upper()}", 
+                        title=f"📱 {profit_result['model'].upper()}", 
                         url=url, 
-                        color=discord.Color.green()
+                        color=color,
+                        description=title[:200]
                     )
-                    embed.add_field(name="Cena", value=f"**{price_val} zł**", inline=True)
-                    embed.add_field(name="Status", value="Nowe ogłoszenie!", inline=True)
-                    embed.set_footer(text="Janek Hunter v5.2 - Auto-Send")
+                    
+                    # Podstawowe info
+                    embed.add_field(name="💰 Cena", value=f"**{price_val} zł**", inline=True)
+                    embed.add_field(name="📊 Stan", value=profit_result['condition'], inline=True)
+                    
+                    # Kalkulacja zysku (jeśli włączone)
+                    if discord_config['send_profit_calc']:
+                        profit_text = (
+                            f"**Zakup:** {profit_result['buy_price']} zł\n"
+                            f"**Naprawa:** {profit_result['repair_cost']} zł\n"
+                            f"**Razem:** {profit_result['total_cost']} zł\n"
+                            f"**Sprzedaż:** {profit_result['market_price']} zł\n"
+                            f"**ZYSK:** {profit_result['potential_profit']} zł ({profit_result['profit_margin']:.1f}%)"
+                        )
+                        embed.add_field(name="📈 Kalkulacja", value=profit_text, inline=False)
+                    
+                    # Rekomendacja
+                    embed.add_field(name="✅ Ocena", value=profit_result['recommendation'], inline=False)
+                    
+                    # AI Analiza (jeśli włączone)
+                    if ai_result and discord_config['send_ai_analysis']:
+                        ai_text = (
+                            f"**Stan:** {ai_result['condition_score']}/10\n"
+                            f"**Warto:** {'✅ TAK' if ai_result['worth_buying'] else '❌ NIE'}\n"
+                            f"**Uwagi:** {ai_result['ai_reasoning'][:100]}..."
+                        )
+                        embed.add_field(name="🤖 AI Analiza", value=ai_text, inline=False)
+                    
+                    # Uszkodzenia (jeśli są)
+                    if profit_result['damages']:
+                        embed.add_field(
+                            name="⚠️ Uszkodzenia", 
+                            value=", ".join(profit_result['damages']), 
+                            inline=False
+                        )
+                    
+                    embed.set_footer(text=f"OLX • Janek Hunter v6.0")
                     
                     try:
                         await channel.send(embed=embed)
-                        sent += 1
+                        stats['sent'] += 1
                         logger.info(f"✅ Wysłano na Discord: {title[:30]}")
-                        print(f"   ✅ SUKCES! Wysłano na Discord.")
                     except Exception as de:
                         logger.error(f"❌ Błąd Discord: {de}")
-                        print(f"   ❌ BŁĄD DISCORDA: {de}")
                     
+                    # Zapisz do bazy
                     self.db.add_offer(url, title, price_val)
                     
                 except Exception as e:
                     logger.debug(f"⚠️ Błąd przetwarzania oferty: {e}")
                     continue
             
-            logger.info(f"📈 PODSUMOWANIE OLX: Sprawdzono={checked}, Wysłano={sent}, Pominięto: budżet={skipped_budget}, duplikaty={skipped_duplicate}, stare={skipped_old}, brak_ceny={skipped_price}")
+            # SMART MATCHING
+            if self.config.is_smart_matching_enabled() and len(all_offers) >= 2:
+                logger.info("💡 Szukam inteligentnych połączeń...")
+                matches = self.profit_calc.find_smart_matches(all_offers)
+                
+                if matches and discord_config['send_smart_matches']:
+                    for match in matches[:3]:  # Max 3 najlepsze
+                        await self._send_smart_match(channel, match, discord_config)
+            
+            # Podsumowanie
+            logger.info(
+                f"📈 PODSUMOWANIE OLX: Sprawdzono={stats['checked']}, "
+                f"Wysłano={stats['sent']}, Pominięto: "
+                f"duplikaty={stats['skipped_duplicate']}, "
+                f"model={stats['skipped_model']}, "
+                f"nieopłacalne={stats['skipped_not_profitable']}, "
+                f"brak_ceny={stats['skipped_no_price']}"
+            )
                     
         except Exception as e: 
             logger.error(f"❌ OLX Global Error: {e}")
-            print(f"❌ OLX Global Error: {e}")
         finally: 
             if not page.is_closed():
                 await page.close()
+    
+    async def _send_smart_match(self, channel, match, discord_config):
+        """Wysyła propozycję inteligentnego połączenia na Discord"""
+        try:
+            embed = discord.Embed(
+                title=f"💡 INTELIGENTNE POŁĄCZENIE - {match['model'].upper()}",
+                color=discord_config['colors']['smart_match'],
+                description=f"**Typ:** {match['combination_type']}"
+            )
+            
+            # Oferta 1
+            offer1 = match['offer1']
+            embed.add_field(
+                name="📱 Oferta 1",
+                value=f"Cena: {offer1['buy_price']} zł\nStan: {offer1['condition']}\n[Link]({offer1['url']})",
+                inline=True
+            )
+            
+            # Oferta 2
+            offer2 = match['offer2']
+            embed.add_field(
+                name="📱 Oferta 2",
+                value=f"Cena: {offer2['buy_price']} zł\nStan: {offer2['condition']}\n[Link]({offer2['url']})",
+                inline=True
+            )
+            
+            # Kalkulacja
+            calc_text = (
+                f"**Zakup:** {offer1['buy_price']} + {offer2['buy_price']} = {offer1['buy_price'] + offer2['buy_price']} zł\n"
+                f"**Montaż:** ~{match['combined_cost'] - offer1['buy_price'] - offer2['buy_price']} zł\n"
+                f"**Razem:** {match['combined_cost']} zł\n"
+                f"**Sprzedaż:** {match['market_price']} zł\n"
+                f"**ZYSK:** {match['potential_profit']} zł ({match['profit_margin']:.1f}%)"
+            )
+            embed.add_field(name="📈 Kalkulacja", value=calc_text, inline=False)
+            embed.add_field(name="✅ Rekomendacja", value=match['recommendation'], inline=False)
+            
+            embed.set_footer(text="Smart Matching • Janek Hunter v6.0")
+            
+            await channel.send(embed=embed)
+            logger.info(f"💡 Wysłano smart match: {match['model']} | Zysk: {match['potential_profit']}zł")
+            
+        except Exception as e:
+            logger.error(f"❌ Błąd wysyłania smart match: {e}")
