@@ -56,9 +56,9 @@ async def main_loop():
 
     async with async_playwright() as p:
         logger.info("🌐 Uruchamianie przeglądarki Chromium...")
-        context = await p.chromium.launch_persistent_context(
-            FB_DATA_DIR, 
-            headless=True,
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_data_dir=FB_DATA_DIR,
             user_agent=USER_AGENT
         )
         logger.info("✅ Przeglądarka gotowa")
