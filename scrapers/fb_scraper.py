@@ -119,15 +119,6 @@ class FacebookScraper:
                             group_name = self._extract_group_name(text)
                             preview = self._extract_post_preview(text)
                             
-                            # Stwórz unikalny ID
-                            notification_id = self._create_notification_id(group_name, preview)
-                            
-                            # Sprawdź czy już było w bazie
-                            if self.db.fb_notification_exists(notification_id):
-                                stats['skipped_duplicate'] += 1
-                                logger.debug(f"🔄 Duplikat FB: {group_name} - {preview[:30]}...")
-                                continue
-                            
                             # Sprawdź czy zawiera "iphone"
                             if "iphone" not in text.lower():
                                 stats['skipped_irrelevant'] += 1
@@ -139,8 +130,9 @@ class FacebookScraper:
                                 logger.debug(f"🚫 Model wyłączony: {text[:30]}")
                                 continue
                             
-                            # Wyciągnij link do posta PRZED kliknięciem
+                            # Wyciągnij link do posta PRZED kliknięciem (używamy jako unique ID)
                             post_url = None
+                            notification_id = None
                             full_content = preview
                             price_val = 0
                             
@@ -159,6 +151,23 @@ class FacebookScraper:
                                     if post_match and group_match:
                                         post_url = f"https://www.facebook.com/groups/{group_match.group(1)}/posts/{post_match.group(1)}/"
                                         logger.info(f"   📍 Post URL: {post_url}")
+                                        
+                                        # Użyj post_url jako unique ID (stabilniejsze niż preview)
+                                        notification_id = hashlib.md5(post_url.encode()).hexdigest()
+                                        
+                                        # Sprawdź czy już było w bazie
+                                        if self.db.fb_notification_exists(notification_id):
+                                            stats['skipped_duplicate'] += 1
+                                            logger.debug(f"🔄 Duplikat FB: {post_url}")
+                                            continue
+                                
+                                # Fallback - jeśli nie ma post_url, użyj starej metody
+                                if not notification_id:
+                                    notification_id = self._create_notification_id(group_name, preview)
+                                    if self.db.fb_notification_exists(notification_id):
+                                        stats['skipped_duplicate'] += 1
+                                        logger.debug(f"🔄 Duplikat FB (fallback): {group_name}")
+                                        continue
                                 
                                 # Kliknij w powiadomienie żeby otworzyć post
                                 await notif.click(timeout=5000)
