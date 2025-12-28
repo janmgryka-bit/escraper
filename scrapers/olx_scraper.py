@@ -209,7 +209,7 @@ class OLXScraper:
                     
                     # AI Analiza (jeśli włączone)
                     if ai_result and discord_config['send_ai_analysis']:
-                        reasoning = ai_result.get('ai_reasoning', 'Brak szczegółów')
+                        reasoning = str(ai_result.get('ai_reasoning', 'Brak szczegółów'))
                         ai_text = (
                             f"**Stan:** {ai_result.get('condition_score', 5)}/10\n"
                             f"**Warto:** {'✅ TAK' if ai_result.get('worth_buying', False) else '❌ NIE'}\n"
