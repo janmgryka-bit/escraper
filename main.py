@@ -56,42 +56,19 @@ async def main_loop():
 
     async with async_playwright() as p:
         logger.info("🌐 Uruchamianie przeglądarki Chromium...")
-        try:
-            # Użyj channel=chromium z executable_path dla systemowej przeglądarki
-            context = await p.chromium.launch_persistent_context(
-                'fb_data',
-                headless=True,
-                user_agent=USER_AGENT,
-                channel='chromium',
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-software-rasterizer'
-                ]
-            )
-            logger.info("✅ Przeglądarka gotowa (system Chromium)")
-        except Exception as e:
-            logger.error(f"❌ Błąd uruchamiania przeglądarki: {e}")
-            logger.error("💡 Próbuję bez channel...")
-            # Fallback - bez channel
-            try:
-                context = await p.chromium.launch_persistent_context(
-                    'fb_data',
-                    headless=True,
-                    user_agent=USER_AGENT,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu'
-                    ]
-                )
-                logger.info("✅ Przeglądarka gotowa (Playwright Chromium)")
-            except Exception as e2:
-                logger.error(f"❌ Błąd: {e2}")
-                raise
+        # Użyj Playwright Chromium ze stabilnymi flagami
+        context = await p.chromium.launch_persistent_context(
+            'fb_data',
+            headless=True,
+            user_agent=USER_AGENT,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ]
+        )
+        logger.info("✅ Przeglądarka gotowa")
         
         cycle = 0
         while True:
