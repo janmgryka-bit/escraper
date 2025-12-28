@@ -164,12 +164,12 @@ class FacebookScraper:
                                 # Kliknij w powiadomienie żeby otworzyć post
                                 await notif.click(timeout=5000)
                                 await asyncio.sleep(3)
-                                    
-                                    # Poczekaj na załadowanie treści posta
-                                    await asyncio.sleep(3)
-                                    
-                                    # Spróbuj wyciągnąć PEŁNĄ treść posta (wszystkie div[dir="auto"])
-                                    post_selectors = [
+                                
+                                # Poczekaj na załadowanie treści posta
+                                await asyncio.sleep(3)
+                                
+                                # Spróbuj wyciągnąć PEŁNĄ treść posta (wszystkie div[dir="auto"])
+                                post_selectors = [
                                         'div[data-ad-preview="message"]',
                                         'div[data-ad-comet-preview="message"]',
                                         'div[role="article"]',
