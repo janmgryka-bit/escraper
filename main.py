@@ -26,6 +26,7 @@ ai_analyzer = AIAnalyzer(config)
 # Inicjalizacja scraperów z nowym systemem
 olx_scraper = OLXScraper(db, config, profit_calc, ai_analyzer)
 fb_scraper = FacebookScraper(db, config, profit_calc, ai_analyzer)
+allegro_scraper = AllegroScraper(db, config, profit_calc, ai_analyzer)
 
 intents = discord.Intents.default()
 bot = discord.Client(intents=intents)

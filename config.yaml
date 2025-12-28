@@ -280,5 +280,5 @@ sources:
   facebook: true
   allegro_lokalnie:
     enabled: true
-    url: "https://allegrolokalnie.pl/oferty/q/iphone"  # Ustaw swoje filtry w przeglądarce i skopiuj URL
+    url: "https://allegrolokalnie.pl/oferty/smartfony-i-telefony-komorkowe/apple-48978/warszawa?zrodlo=allegro&zrodlo=lokalnie&odleglosc=50&typ=kup-teraz&typ=ogloszenie&stan=uzywane&stan=uszkodzone"  # Ustaw swoje filtry w przeglądarce i skopiuj URL
   vinted: false   # TODO: do zaimplementowania
