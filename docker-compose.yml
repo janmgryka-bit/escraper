@@ -5,9 +5,11 @@ services:
     container_name: janek_hunter
     restart: always
     volumes:
-      - ./fb_data:/app/fb_data
-      - ./hunter_final.db:/app/hunter_final.db
-      - ./scraper.log:/app/scraper.log
+      # Mapujemy cały bieżący folder (.) do folderu /app w kontenerze
+      - .:/app
+      # Zapobiega nadpisaniu node_modules/venv wewnątrz kontenera
+      - /app/.venv
+      - /app/__pycache__
     env_file:
       - .env
     environment:
