@@ -85,6 +85,13 @@ class FacebookScraper:
             login_check = await page.locator('input[name="email"]').count()
             if login_check > 0:
                 logger.error("❌ [FB] Wykryto formularz logowania - sesja wygasła!")
+                # Zrób screenshot przed wysłaniem komunikatu
+                try:
+                    await page.screenshot(path='fb_error.png')
+                    logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
+                except Exception as e:
+                    logger.error(f"❌ [FB] Nie udało się zrobić screenshota: {e}")
+                
                 if channel:
                     await channel.send("⚠️ **Sesja FB wygasła!** Zaloguj się ponownie w przeglądarce.")
                 await page.close()
