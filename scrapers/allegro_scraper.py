@@ -114,9 +114,9 @@ class AllegroScraper:
                     else:
                         description = title
                     
-                    # Sprawdź duplikaty na podstawie treści (tytuł + opis)
+                    # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena
                     content = f"{title}\n{description}"
-                    if self.db.offer_exists(content):
+                    if self.db.offer_exists(content, price_val):
                         stats['skipped_duplicate'] += 1
                         logger.debug(f"🔄 Duplikat: {title[:30]}")
                         continue
@@ -158,7 +158,8 @@ class AllegroScraper:
                         color=color
                     )
                     
-                    embed.description = description[:500] + ("..." if len(description) > 500 else "")
+                    # PEŁNY OPIS (do 4000 znaków zgodnie z limitem Discord)
+                    embed.description = content[:4000]
                     
                     # Dodaj kalkulację
                     if profit_result and discord_config['send_profit_calc']:

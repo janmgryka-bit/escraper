@@ -295,12 +295,8 @@ class FacebookScraper:
                                 color=color
                             )
                             
-                            # Pokaż PEŁNĄ treść (max 1500 znaków dla Discord)
-                            content_display = full_content[:1500]
-                            if len(full_content) > 1500:
-                                content_display += "..."
-                            
-                            embed.description = content_display
+                            # PEŁNY OPIS (do 4000 znaków zgodnie z limitem Discord)
+                            embed.description = full_content[:4000]
                             embed.add_field(name="📍 Grupa", value=group_name, inline=False)
                             
                             # Dodaj kalkulację jeśli jest
@@ -323,8 +319,8 @@ class FacebookScraper:
                             except Exception as de:
                                 logger.error(f"❌ Błąd Discord: {de}")
                             
-                            # Zapisz do bazy (używając treści jako unique ID)
-                            self.db.add_fb_notification(full_content, group_name, post_url)
+                            # Zapisz do bazy (używając 100 znaków opisu + cena jako unique ID)
+                            self.db.add_fb_notification(full_content, price_val, group_name, post_url)
                             
                         except Exception as e:
                             logger.debug(f"⚠️ Błąd przetwarzania powiadomienia: {e}")

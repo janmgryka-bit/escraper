@@ -18,10 +18,20 @@ class Database:
         conn.commit()
         conn.close()
     
-    def _create_content_hash(self, content):
-        """Tworzy hash z pierwszych 300 znaków treści"""
-        normalized = content[:300].lower().strip()
-        return hashlib.md5(normalized.encode()).hexdigest()
+    def _create_content_hash(self, description, price=None):
+        """Tworzy hash z pierwszych 100 znaków opisu + cena (zgodnie z wymaganiami)"""
+        # Pierwsze 100 znaków opisu
+        desc_part = description[:100].lower().strip()
+        # Usuń białe znaki dla lepszego porównania
+        desc_clean = "".join(desc_part.split())
+        
+        # Dodaj cenę jeśli podana
+        if price is not None:
+            unique_string = f"{desc_clean}{price}"
+        else:
+            unique_string = desc_clean
+        
+        return hashlib.md5(unique_string.encode()).hexdigest()
     
     def offer_exists(self, content):
         """Sprawdź czy oferta istnieje na podstawie treści (300 znaków)"""
@@ -45,21 +55,22 @@ class Database:
         finally:
             conn.close()
     
-    def fb_notification_exists(self, content_hash):
-        """Sprawdź czy powiadomienie FB istnieje na podstawie content_hash"""
+    def fb_notification_exists(self, description, price=0):
+        """Sprawdź czy powiadomienie FB istnieje na podstawie opisu + cena"""
+        content_hash = self._create_content_hash(description, price)
         conn = sqlite3.connect(self.db_path)
         result = conn.execute("SELECT notification_id FROM fb_notifications WHERE notification_id=?", 
                             (content_hash,)).fetchone()
         conn.close()
         return result is not None
     
-    def add_fb_notification(self, content, group_name, post_url):
-        """Dodaj powiadomienie FB używając content_hash jako unique ID"""
-        content_hash = self._create_content_hash(content)
+    def add_fb_notification(self, description, price, group_name, post_url):
+        """Dodaj powiadomienie FB używając content_hash jako unique ID (100 znaków + cena)"""
+        content_hash = self._create_content_hash(description, price)
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute("INSERT INTO fb_notifications (notification_id, group_name, content, post_url, date_added) VALUES (?, ?, ?, ?, ?)", 
-                        (content_hash, group_name, content[:500], post_url, datetime.now().isoformat()))
+                        (content_hash, group_name, description[:500], post_url, datetime.now().isoformat()))
             conn.commit()
             return True
         except sqlite3.IntegrityError:

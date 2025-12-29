@@ -103,8 +103,8 @@ class OLXScraper:
                     full_text = await offer.inner_text()
                     title = full_text.split('\n')[0]
                     
-                    # Sprawdź duplikaty na podstawie treści (300 znaków)
-                    if self.db.offer_exists(full_text):
+                    # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena
+                    if self.db.offer_exists(full_text, price_val):
                         stats['skipped_duplicate'] += 1
                         logger.debug(f"🔄 Duplikat: {title[:30]}...")
                         continue
@@ -184,11 +184,14 @@ class OLXScraper:
                             color = discord_config['colors']['not_profitable']  # Czerwony
                         
                         logger.debug(f"   📝 Tworzę embed...")
+                        # PEŁNY OPIS (do 4000 znaków zgodnie z limitem Discord)
+                        full_description = full_text[:4000]
+                        
                         embed = discord.Embed(
                             title=f"📱 {profit_result['model'].upper()}", 
                             url=url, 
                             color=color,
-                            description=title[:200]
+                            description=full_description
                         )
                     except Exception as embed_err:
                         logger.error(f"❌ Błąd tworzenia embeda: {embed_err}")
