@@ -209,6 +209,7 @@ async def on_ready():
     
     # Inicjalizuj Playwright context przy starcie bota
     logger.info("🌐 Inicjalizacja Playwright...")
+    print(f"DEBUG: Próba użycia sesji z folderu {FB_DATA_DIR}...")
     try:
         from playwright.async_api import async_playwright
         p = await async_playwright().start()
@@ -227,8 +228,10 @@ async def on_ready():
         )
         bot_state["playwright_context"] = context
         logger.info("✅ Playwright context gotowy (persistent session)")
+        print(f"DEBUG: Sesja z {FB_DATA_DIR} załadowana pomyślnie")
     except Exception as e:
         logger.error(f"❌ Błąd inicjalizacji Playwright: {e}")
+        print(f"DEBUG: Błąd ładowania sesji z {FB_DATA_DIR}: {e}")
     
     logger.info(f"⏸️  Bot czeka na komendę !start")
 

@@ -36,7 +36,9 @@ class Database:
         else:
             unique_string = desc_clean
         
-        return hashlib.md5(unique_string.encode()).hexdigest()
+        hash_result = hashlib.md5(unique_string.encode()).hexdigest()
+        print(f"DEBUG: content_hash = {hash_result[:8]}... (opis[:50]={description[:50]}, cena={price})")
+        return hash_result
     
     def offer_exists(self, description, price, title=None):
         """Sprawdź czy oferta istnieje na podstawie opisu (100 znaków) + cena + tytuł"""
