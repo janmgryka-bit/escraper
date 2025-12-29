@@ -85,16 +85,16 @@ async def main_loop():
                 logger.info("🔄 Przeładowuję konfigurację...")
                 config.reload()
             
-            # FB scraper wyłączony (wymaga cookies)
-            await fb_scraper.check_notifications(None, channel)
+            # Facebook notifications
+            await fb_scraper.check_notifications(context, channel)
             
-            # OLX i Allegro używają cloudscraper (nie potrzebują context)
-            await olx_scraper.scrape(None, channel)
+            # OLX scraper
+            await olx_scraper.scrape(context, channel)
             
             # Allegro Lokalnie (jeśli włączone)
             allegro_config = config.config.get('sources', {}).get('allegro_lokalnie', {})
             if allegro_config.get('enabled', False):
-                await allegro_scraper.scrape(None, channel)
+                await allegro_scraper.scrape(context, channel)
             
             logger.info(f"✅ Cykl #{cycle} zakończony pomyślnie")
         except Exception as e:
