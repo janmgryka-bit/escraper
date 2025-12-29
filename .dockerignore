@@ -1,0 +1,9 @@
+fb_data/
+hunter_final.db
+scraper.log
+*.log
+__pycache__/
+*.pyc
+.git/
+.env
+*.db-journal
