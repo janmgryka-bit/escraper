@@ -114,9 +114,9 @@ class AllegroScraper:
                     else:
                         description = title
                     
-                    # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena
+                    # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena + tytuł
                     content = f"{title}\n{description}"
-                    if self.db.offer_exists(content, price_val):
+                    if self.db.offer_exists(content, price_val, title):
                         stats['skipped_duplicate'] += 1
                         logger.debug(f"🔄 Duplikat: {title[:30]}")
                         continue
@@ -191,15 +191,18 @@ class AllegroScraper:
                     
                     embed.set_footer(text="Allegro Lokalnie • Janek Hunter v6.0")
                     
+                    # Zapisz do bazy PRZED wysłaniem na Discord (zapobiega duplikatom przy błędzie wysyłki)
+                    if not self.db.add_offer(content, price_val, url, title, 'allegro'):
+                        logger.warning(f"⚠️ Oferta już istnieje w bazie (race condition): {title[:30]}")
+                        stats['skipped_duplicate'] += 1
+                        continue
+                    
                     try:
                         await channel.send(embed=embed)
                         stats['sent'] += 1
                         logger.info(f"✅ Wysłano na Discord: {title[:40]}")
                     except Exception as de:
                         logger.error(f"❌ Błąd Discord: {de}")
-                    
-                    # Zapisz do bazy (używając treści jako unique ID)
-                    self.db.add_offer(content, url, title, price_val, 'allegro')
                     
                 except Exception as e:
                     logger.error(f"❌ Błąd przetwarzania oferty: {e}")

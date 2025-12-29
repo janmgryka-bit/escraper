@@ -103,8 +103,8 @@ class OLXScraper:
                     full_text = await offer.inner_text()
                     title = full_text.split('\n')[0]
                     
-                    # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena
-                    if self.db.offer_exists(full_text, price_val):
+                    # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena + tytuł
+                    if self.db.offer_exists(full_text, price_val, title):
                         stats['skipped_duplicate'] += 1
                         logger.debug(f"🔄 Duplikat: {title[:30]}...")
                         continue
@@ -244,6 +244,12 @@ class OLXScraper:
                     
                     embed.set_footer(text=f"OLX • Janek Hunter v6.0")
                     
+                    # Zapisz do bazy PRZED wysłaniem na Discord (zapobiega duplikatom przy błędzie wysyłki)
+                    if not self.db.add_offer(full_text, price_val, url, title, 'olx'):
+                        logger.warning(f"⚠️ Oferta już istnieje w bazie (race condition): {title[:30]}")
+                        stats['skipped_duplicate'] += 1
+                        continue
+                    
                     try:
                         if channel:
                             await channel.send(embed=embed)
@@ -256,9 +262,6 @@ class OLXScraper:
                         logger.error(f"❌ Błąd Discord: {de}")
                         import traceback
                         logger.error(traceback.format_exc())
-                    
-                    # Zapisz do bazy (używając treści jako unique ID)
-                    self.db.add_offer(full_text, url, title, price_val, 'olx')
                     
                 except Exception as e:
                     logger.error(f"❌ Błąd przetwarzania oferty: {e}")

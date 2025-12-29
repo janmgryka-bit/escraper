@@ -18,12 +18,17 @@ class Database:
         conn.commit()
         conn.close()
     
-    def _create_content_hash(self, description, price=None):
-        """Tworzy hash z pierwszych 100 znaków opisu + cena (zgodnie z wymaganiami)"""
+    def _create_content_hash(self, description, price=None, title=None):
+        """Tworzy hash z pierwszych 100 znaków opisu + cena + tytuł (bez białych znaków)"""
         # Pierwsze 100 znaków opisu
         desc_part = description[:100].lower().strip()
-        # Usuń białe znaki dla lepszego porównania
+        # Usuń WSZYSTKIE białe znaki (spacje, entery, taby)
         desc_clean = "".join(desc_part.split())
+        
+        # Dodaj tytuł (również bez białych znaków)
+        if title:
+            title_clean = "".join(title.lower().strip().split())
+            desc_clean = f"{desc_clean}{title_clean}"
         
         # Dodaj cenę jeśli podana
         if price is not None:
@@ -33,17 +38,17 @@ class Database:
         
         return hashlib.md5(unique_string.encode()).hexdigest()
     
-    def offer_exists(self, description, price):
-        """Sprawdź czy oferta istnieje na podstawie opisu (100 znaków) + cena"""
-        content_hash = self._create_content_hash(description, price)
+    def offer_exists(self, description, price, title=None):
+        """Sprawdź czy oferta istnieje na podstawie opisu (100 znaków) + cena + tytuł"""
+        content_hash = self._create_content_hash(description, price, title)
         conn = sqlite3.connect(self.db_path)
-        result = conn.execute("SELECT content_hash FROM offers WHERE content_hash=?", (content_hash,)).fetchone()
+        result = conn.execute("SELECT 1 FROM offers WHERE content_hash=?", (content_hash,)).fetchone()
         conn.close()
         return result is not None
     
     def add_offer(self, description, price, url, title, source='olx'):
-        """Dodaj ofertę używając content_hash jako unique ID (100 znaków opisu + cena)"""
-        content_hash = self._create_content_hash(description, price)
+        """Dodaj ofertę używając content_hash jako unique ID (100 znaków opisu + cena + tytuł)"""
+        content_hash = self._create_content_hash(description, price, title)
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute("INSERT INTO offers (content_hash, url, title, price, source, date_added) VALUES (?, ?, ?, ?, ?, ?)", 
@@ -55,18 +60,18 @@ class Database:
         finally:
             conn.close()
     
-    def fb_notification_exists(self, description, price=0):
-        """Sprawdź czy powiadomienie FB istnieje na podstawie opisu + cena"""
-        content_hash = self._create_content_hash(description, price)
+    def fb_notification_exists(self, description, price=0, title=None):
+        """Sprawdź czy powiadomienie FB istnieje na podstawie opisu + cena + tytuł"""
+        content_hash = self._create_content_hash(description, price, title)
         conn = sqlite3.connect(self.db_path)
-        result = conn.execute("SELECT notification_id FROM fb_notifications WHERE notification_id=?", 
+        result = conn.execute("SELECT 1 FROM fb_notifications WHERE notification_id=?", 
                             (content_hash,)).fetchone()
         conn.close()
         return result is not None
     
-    def add_fb_notification(self, description, price, group_name, post_url):
-        """Dodaj powiadomienie FB używając content_hash jako unique ID (100 znaków + cena)"""
-        content_hash = self._create_content_hash(description, price)
+    def add_fb_notification(self, description, price, group_name, post_url, title=None):
+        """Dodaj powiadomienie FB używając content_hash jako unique ID (100 znaków + cena + tytuł)"""
+        content_hash = self._create_content_hash(description, price, title)
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute("INSERT INTO fb_notifications (notification_id, group_name, content, post_url, date_added) VALUES (?, ?, ?, ?, ?)", 

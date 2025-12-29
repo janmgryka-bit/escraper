@@ -63,19 +63,34 @@ class FacebookScraper:
         Sprawdza powiadomienia FB, wyciąga nazwę grupy i treść, 
         klika w post i skanuje pełną zawartość.
         """
-        page = await context.new_page()
+        logger.info("🔔 [FB] Rozpoczynam sprawdzanie powiadomień FB...")
         
         try:
-            logger.info("🔔 Rozpoczynam sprawdzanie powiadomień FB...")
+            page = await context.new_page()
+            logger.info("🔔 [FB] Próba otwarcia sesji FB...")
+        except Exception as e:
+            logger.error(f"❌ [FB] Błąd tworzenia strony: {e}")
+            if channel:
+                await channel.send("⚠️ **Sesja FB wygasła!** Zaloguj się ponownie.")
+            return
+        
+        try:
+            logger.info("🔔 [FB] Ładowanie strony powiadomień...")
             await page.goto(self.fb_notifications_url, timeout=60000)
-            logger.info("✅ Strona FB notifications załadowana")
+            logger.info("✅ [FB] Strona FB notifications załadowana")
             await asyncio.sleep(3)
             
-            # Sprawdź czy zalogowany (tylko loguj, nie przerywaj)
+            # Sprawdź czy zalogowany
+            logger.info("🔔 [FB] Sprawdzam sesję logowania...")
             login_check = await page.locator('input[name="email"]').count()
             if login_check > 0:
-                logger.debug("⚠️ FB: Wykryto formularz logowania, ale kontynuuję (persistent context)")
-                # Nie przerywaj - persistent context powinien mieć sesję
+                logger.error("❌ [FB] Wykryto formularz logowania - sesja wygasła!")
+                if channel:
+                    await channel.send("⚠️ **Sesja FB wygasła!** Zaloguj się ponownie w przeglądarce.")
+                await page.close()
+                return
+            
+            logger.info("✅ [FB] Sesja aktywna, szukam powiadomień...")
             
             # Próbuj różne selektory dla powiadomień
             notification_selectors = [
@@ -96,11 +111,12 @@ class FacebookScraper:
             }
             
             for selector in notification_selectors:
+                logger.debug(f"🔍 [FB] Próbuję selektora: {selector}")
                 notif_locator = page.locator(selector)
                 count = await notif_locator.count()
                 
                 if count > 0:
-                    logger.info(f"✅ Znaleziono {count} powiadomień (selector: {selector})")
+                    logger.info(f"✅ [FB] Znaleziono {count} powiadomień (selector: {selector})")
                     notifications_found = True
                     
                     # Sprawdź max 10 najnowszych powiadomień
@@ -128,6 +144,12 @@ class FacebookScraper:
                             if not self.config.is_model_enabled(text):
                                 stats['skipped_model'] += 1
                                 logger.debug(f"🚫 Model wyłączony: {text[:30]}")
+                                continue
+                            
+                            # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena + tytuł (group_name)
+                            if self.db.fb_notification_exists(full_content, price_val, group_name):
+                                stats['skipped_duplicate'] += 1
+                                logger.info(f"🔄 [FB] Duplikat (treść + cena + grupa): {group_name}")
                                 continue
                             
                             # Wyciągnij link do posta PRZED kliknięciem
@@ -319,8 +341,11 @@ class FacebookScraper:
                             except Exception as de:
                                 logger.error(f"❌ Błąd Discord: {de}")
                             
-                            # Zapisz do bazy (używając 100 znaków opisu + cena jako unique ID)
-                            self.db.add_fb_notification(full_content, price_val, group_name, post_url)
+                            # Zapisz do bazy PRZED wysłaniem na Discord (używając 100 znaków opisu + cena + grupa jako unique ID)
+                            if not self.db.add_fb_notification(full_content, price_val, group_name, post_url, group_name):
+                                logger.warning(f"⚠️ [FB] Powiadomienie już istnieje w bazie (race condition): {group_name}")
+                                stats['skipped_duplicate'] += 1
+                                continue
                             
                         except Exception as e:
                             logger.debug(f"⚠️ Błąd przetwarzania powiadomienia: {e}")
@@ -329,7 +354,10 @@ class FacebookScraper:
                     break  # Znaleziono powiadomienia, nie sprawdzaj innych selektorów
             
             if not notifications_found:
-                logger.warning("⚠️ FB: Nie znaleziono powiadomień (możliwe zmiany w strukturze FB)")
+                logger.warning("⚠️ [FB] Nie znaleziono żadnych powiadomień FB (sprawdzono wszystkie selektory)")
+                logger.warning("⚠️ [FB] Możliwe przyczyny: brak nowych powiadomień, zmiana struktury FB, lub nieaktualne selektory CSS")
+                if channel:
+                    await channel.send("⚠️ **FB:** Brak nowych powiadomień lub selektory CSS wymagają aktualizacji.")
             else:
                 logger.info(
                     f"📈 PODSUMOWANIE FB: Sprawdzono={stats['checked']}, "
