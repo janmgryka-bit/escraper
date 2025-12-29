@@ -4,6 +4,8 @@ services:
     build: .
     container_name: janek_hunter
     restart: always
+    ports:
+      - "9222:9222"  # Remote debugging port dla manual_login.py
     volumes:
       # Mapujemy cały bieżący folder (.) do folderu /app w kontenerze
       - .:/app
