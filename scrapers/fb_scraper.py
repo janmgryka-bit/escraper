@@ -58,6 +58,63 @@ class FacebookScraper:
         unique_string = f"{group_name}_{preview[:50]}"
         return hashlib.md5(unique_string.encode()).hexdigest()
     
+    async def bypass_fb_cookies(self, page):
+        """
+        Omija okno Cookie Consent na Facebooku.
+        Szuka i klika przyciski akceptacji cookies.
+        """
+        logger.info("🍪 [FB] Sprawdzam okno Cookie Consent...")
+        print("DEBUG: Sprawdzam czy wystąpiło okno cookies...")
+        
+        cookie_selectors = [
+            ('button:has-text("Zezwól na wszystkie pliki cookie")', 'Polski: Zezwól na wszystkie'),
+            ('button:has-text("Akceptuj wszystkie")', 'Polski: Akceptuj wszystkie'),
+            ('button:has-text("Allow all cookies")', 'Angielski: Allow all cookies'),
+            ('button:has-text("Accept All")', 'Angielski: Accept All'),
+            ('button[data-cookiebanner="accept_button"]', 'Data attribute: accept_button'),
+            ('button[title="Accept All"]', 'Title: Accept All'),
+            ('div[aria-label="Zezwól na wszystkie pliki cookie"]', 'Aria-label: Zezwól'),
+            ('div[aria-label="Allow all cookies"]', 'Aria-label: Allow')
+        ]
+        
+        cookie_found = False
+        for selector, description in cookie_selectors:
+            try:
+                cookie_button = page.locator(selector).first
+                # Czekaj max 3 sekundy na przycisk
+                await cookie_button.wait_for(state="visible", timeout=3000)
+                
+                if await cookie_button.is_visible():
+                    logger.info(f"🍪 [FB] Wykryto okno cookies: {description}")
+                    print(f"DEBUG: Wykryto okno cookies, próbuję kliknąć przycisk: {description}")
+                    
+                    # Kliknij przycisk
+                    await cookie_button.click()
+                    logger.info("✅ [FB] Kliknięto przycisk akceptacji cookies")
+                    
+                    # Czekaj na zniknięcie okna
+                    await asyncio.sleep(2)
+                    
+                    # Zrób screenshot po kliknięciu
+                    try:
+                        await page.screenshot(path='fb_after_cookie.png')
+                        logger.info("📸 [FB] Screenshot po kliknięciu cookies: fb_after_cookie.png")
+                        print("DEBUG: Screenshot zapisany jako fb_after_cookie.png")
+                    except Exception as e:
+                        logger.warning(f"⚠️ [FB] Nie udało się zrobić screenshota: {e}")
+                    
+                    cookie_found = True
+                    break
+            except Exception:
+                # Ten selektor nie zadziałał, próbuj następny
+                continue
+        
+        if not cookie_found:
+            logger.info("✅ [FB] Okno cookies nie wystąpiło lub już zaakceptowane")
+            print("DEBUG: Okno cookies nie wystąpiło")
+        
+        return cookie_found
+    
     async def check_notifications(self, context, channel):
         """
         Sprawdza powiadomienia FB, wyciąga nazwę grupy i treść, 
@@ -84,27 +141,8 @@ class FacebookScraper:
             await page.wait_for_load_state("networkidle", timeout=15000)
             await asyncio.sleep(2)
             
-            # KROK 1: Sprawdź i zaakceptuj cookies jeśli są
-            logger.info("🍪 [FB] Sprawdzam okno cookies...")
-            cookie_selectors = [
-                'button:has-text("Allow all cookies")',
-                'button:has-text("Accept All")',
-                'button:has-text("Akceptuj wszystkie")',
-                'button[data-cookiebanner="accept_button"]',
-                'button[title="Accept All"]'
-            ]
-            
-            for selector in cookie_selectors:
-                try:
-                    cookie_button = page.locator(selector).first
-                    if await cookie_button.is_visible(timeout=2000):
-                        logger.info(f"🍪 [FB] Znaleziono przycisk cookies: {selector}")
-                        await cookie_button.click()
-                        logger.info("✅ [FB] Cookies zaakceptowane")
-                        await asyncio.sleep(2)
-                        break
-                except:
-                    continue
+            # KROK 1: Omiń okno Cookie Consent (dedykowana funkcja)
+            await self.bypass_fb_cookies(page)
             
             # KROK 2: Inteligentne sprawdzenie sesji
             logger.info("🔔 [FB] Sprawdzam sesję logowania...")
