@@ -33,17 +33,17 @@ class Database:
         
         return hashlib.md5(unique_string.encode()).hexdigest()
     
-    def offer_exists(self, content):
-        """Sprawdź czy oferta istnieje na podstawie treści (300 znaków)"""
-        content_hash = self._create_content_hash(content)
+    def offer_exists(self, description, price):
+        """Sprawdź czy oferta istnieje na podstawie opisu (100 znaków) + cena"""
+        content_hash = self._create_content_hash(description, price)
         conn = sqlite3.connect(self.db_path)
         result = conn.execute("SELECT content_hash FROM offers WHERE content_hash=?", (content_hash,)).fetchone()
         conn.close()
         return result is not None
     
-    def add_offer(self, content, url, title, price, source='olx'):
-        """Dodaj ofertę używając content_hash jako unique ID"""
-        content_hash = self._create_content_hash(content)
+    def add_offer(self, description, price, url, title, source='olx'):
+        """Dodaj ofertę używając content_hash jako unique ID (100 znaków opisu + cena)"""
+        content_hash = self._create_content_hash(description, price)
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute("INSERT INTO offers (content_hash, url, title, price, source, date_added) VALUES (?, ?, ?, ?, ?, ?)", 
