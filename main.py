@@ -59,53 +59,72 @@ async def main_loop():
     logger.info(f"💡 Smart Matching: {'✅ Włączone' if config.is_smart_matching_enabled() else '❌ Wyłączone'}")
     
     await channel.send(
-        f"🚀 **Janek Hunter v6.0 - Lightweight Edition!**\n"
+        f"🚀 **Janek Hunter v6.0 - Docker Edition!**\n"
         f"📱 Modele: {len(enabled_models)}\n"
         f"📊 Stany: {', '.join(enabled_conditions)}\n"
         f"🤖 AI: {'✅' if ai_analyzer.enabled else '❌'}\n"
         f"💡 Smart Matching: {'✅' if config.is_smart_matching_enabled() else '❌'}\n"
-        f"⚡ Używam cloudscraper + BeautifulSoup4 (bez Playwright)"
+        f"🐳 Uruchomiony w kontenerze Docker z Playwright"
     )
     
-    cycle = 0
-    while True:
-        cycle += 1
-        logger.info(f"\n{'='*60}")
-        logger.info(f"🔄 CYKL #{cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"{'='*60}")
+    async with async_playwright() as p:
+        logger.info("🌐 Uruchamianie przeglądarki Chromium (headless)...")
         
-        # Sprawdź czy bot nadal ma działać
-        if not bot_state["is_running"]:
-            logger.info("🛑 Bot zatrzymany przez użytkownika")
-            break
+        # Playwright w Dockerze - używa preinstalowanego Chromium
+        context = await p.chromium.launch_persistent_context(
+            FB_DATA_DIR,
+            headless=True,
+            user_agent=USER_AGENT,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--disable-extensions'
+            ]
+        )
+        logger.info("✅ Przeglądarka gotowa (persistent session)")
         
-        try:
-            # Przeładuj config co 10 cykli (auto-refresh)
-            if cycle % 10 == 0:
-                logger.info("🔄 Przeładowuję konfigurację...")
-                config.reload()
+        cycle = 0
+        while True:
+            cycle += 1
+            logger.info(f"\n{'='*60}")
+            logger.info(f"🔄 CYKL #{cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"{'='*60}")
             
-            # Facebook notifications
-            await fb_scraper.check_notifications(context, channel)
+            # Sprawdź czy bot nadal ma działać
+            if not bot_state["is_running"]:
+                logger.info("🛑 Bot zatrzymany przez użytkownika")
+                break
             
-            # OLX scraper
-            await olx_scraper.scrape(context, channel)
+            try:
+                # Przeładuj config co 10 cykli (auto-refresh)
+                if cycle % 10 == 0:
+                    logger.info("🔄 Przeładowuję konfigurację...")
+                    config.reload()
+                
+                # Facebook notifications
+                await fb_scraper.check_notifications(context, channel)
+                
+                # OLX scraper
+                await olx_scraper.scrape(context, channel)
+                
+                # Allegro Lokalnie (jeśli włączone)
+                allegro_config = config.config.get('sources', {}).get('allegro_lokalnie', {})
+                if allegro_config.get('enabled', False):
+                    await allegro_scraper.scrape(context, channel)
+                
+                logger.info(f"✅ Cykl #{cycle} zakończony pomyślnie")
+            except Exception as e:
+                logger.error(f"⚠️ Błąd w głównej pętli (cykl #{cycle}): {e}")
+                await channel.send(f"⚠️ Błąd w głównej pętli: {str(e)[:100]}")
             
-            # Allegro Lokalnie (jeśli włączone)
-            allegro_config = config.config.get('sources', {}).get('allegro_lokalnie', {})
-            if allegro_config.get('enabled', False):
-                await allegro_scraper.scrape(context, channel)
-            
-            logger.info(f"✅ Cykl #{cycle} zakończony pomyślnie")
-        except Exception as e:
-            logger.error(f"⚠️ Błąd w głównej pętli (cykl #{cycle}): {e}")
-            await channel.send(f"⚠️ Błąd w głównej pętli: {str(e)[:100]}")
-        
-        # Pobierz interwał z konfiguracji
-        min_wait, max_wait = config.get_check_interval()
-        wait_time = random.randint(min_wait, max_wait)
-        logger.info(f"💤 Czekam {wait_time}s do następnego cyklu...")
-        await asyncio.sleep(wait_time)
+            # Pobierz interwał z konfiguracji
+            min_wait, max_wait = config.get_check_interval()
+            wait_time = random.randint(min_wait, max_wait)
+            logger.info(f"💤 Czekam {wait_time}s do następnego cyklu...")
+            await asyncio.sleep(wait_time)
 
 @bot.command(name="set_budget")
 async def set_budget_cmd(ctx, budget: int):
