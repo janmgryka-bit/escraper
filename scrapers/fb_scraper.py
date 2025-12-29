@@ -13,7 +13,7 @@ class FacebookScraper:
         self.config = config_loader
         self.profit_calc = profit_calculator
         self.ai = ai_analyzer
-        self.fb_notifications_url = "https://www.facebook.com/notifications"
+        self.fb_notifications_url = "https://m.facebook.com/notifications"
         self.fb_marketplace_url = "https://www.facebook.com/marketplace/warsaw/search?query=iphone&exact=false"
     
     def _extract_group_name(self, text):
@@ -75,27 +75,89 @@ class FacebookScraper:
             return
         
         try:
-            logger.info("🔔 [FB] Ładowanie strony powiadomień...")
+            logger.info("🔔 [FB] Ładowanie strony powiadomień (mobile)...")
             await page.goto(self.fb_notifications_url, timeout=60000)
             logger.info("✅ [FB] Strona FB notifications załadowana")
-            await asyncio.sleep(3)
             
-            # Sprawdź czy zalogowany
-            logger.info("🔔 [FB] Sprawdzam sesję logowania...")
-            login_check = await page.locator('input[name="email"]').count()
-            if login_check > 0:
-                logger.error("❌ [FB] Wykryto formularz logowania - sesja wygasła!")
-                # Zrób screenshot przed wysłaniem komunikatu
+            # Czekaj na pełne załadowanie sieci (daje czas na aktywację sesji)
+            logger.info("⏳ [FB] Czekam na networkidle...")
+            await page.wait_for_load_state("networkidle", timeout=15000)
+            await asyncio.sleep(2)
+            
+            # KROK 1: Sprawdź i zaakceptuj cookies jeśli są
+            logger.info("🍪 [FB] Sprawdzam okno cookies...")
+            cookie_selectors = [
+                'button:has-text("Allow all cookies")',
+                'button:has-text("Accept All")',
+                'button:has-text("Akceptuj wszystkie")',
+                'button[data-cookiebanner="accept_button"]',
+                'button[title="Accept All"]'
+            ]
+            
+            for selector in cookie_selectors:
                 try:
+                    cookie_button = page.locator(selector).first
+                    if await cookie_button.is_visible(timeout=2000):
+                        logger.info(f"🍪 [FB] Znaleziono przycisk cookies: {selector}")
+                        await cookie_button.click()
+                        logger.info("✅ [FB] Cookies zaakceptowane")
+                        await asyncio.sleep(2)
+                        break
+                except:
+                    continue
+            
+            # KROK 2: Inteligentne sprawdzenie sesji
+            logger.info("🔔 [FB] Sprawdzam sesję logowania...")
+            
+            # Sprawdź czy to faktycznie formularz logowania czy tylko cookies
+            login_check = await page.locator('input[name="email"]').count()
+            password_check = await page.locator('input[name="pass"]').count()
+            
+            if login_check > 0 and password_check > 0:
+                logger.warning("⚠️ [FB] Wykryto formularz logowania - próbuję automatycznego logowania...")
+                
+                # Spróbuj zalogować się automatycznie z .env
+                import os
+                fb_email = os.getenv('FB_EMAIL')
+                fb_password = os.getenv('FB_PASSWORD')
+                
+                if fb_email and fb_password:
+                    try:
+                        logger.info("🔐 [FB] Próba automatycznego logowania...")
+                        await page.fill('input[name="email"]', fb_email)
+                        await asyncio.sleep(1)
+                        await page.fill('input[name="pass"]', fb_password)
+                        await asyncio.sleep(1)
+                        await page.click('button[name="login"], input[name="login"]')
+                        logger.info("⏳ [FB] Czekam na zalogowanie...")
+                        await asyncio.sleep(5)
+                        
+                        # Sprawdź czy logowanie się powiodło
+                        if await page.locator('input[name="email"]').count() > 0:
+                            logger.error("❌ [FB] Automatyczne logowanie nie powiodło się")
+                            await page.screenshot(path='fb_error.png')
+                            logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
+                            if channel:
+                                await channel.send("⚠️ **Sesja FB wygasła!** Automatyczne logowanie nie powiodło się. Uruchom: `docker exec -it janek_hunter python fb_login.py`")
+                            await page.close()
+                            return
+                        else:
+                            logger.info("✅ [FB] Automatyczne logowanie powiodło się!")
+                    except Exception as e:
+                        logger.error(f"❌ [FB] Błąd automatycznego logowania: {e}")
+                        await page.screenshot(path='fb_error.png')
+                        if channel:
+                            await channel.send("⚠️ **Sesja FB wygasła!** Uruchom: `docker exec -it janek_hunter python fb_login.py`")
+                        await page.close()
+                        return
+                else:
+                    logger.error("❌ [FB] Brak FB_EMAIL/FB_PASSWORD w .env - nie mogę zalogować automatycznie")
                     await page.screenshot(path='fb_error.png')
                     logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
-                except Exception as e:
-                    logger.error(f"❌ [FB] Nie udało się zrobić screenshota: {e}")
-                
-                if channel:
-                    await channel.send("⚠️ **Sesja FB wygasła!** Zaloguj się ponownie w przeglądarce.")
-                await page.close()
-                return
+                    if channel:
+                        await channel.send("⚠️ **Sesja FB wygasła!** Dodaj FB_EMAIL i FB_PASSWORD do .env, potem uruchom: `docker exec -it janek_hunter python fb_login.py`")
+                    await page.close()
+                    return
             
             logger.info("✅ [FB] Sesja aktywna, szukam powiadomień...")
             
