@@ -2,6 +2,9 @@ import asyncio
 from datetime import datetime
 import discord
 import logging
+import cloudscraper
+from bs4 import BeautifulSoup
+import re
 
 logger = logging.getLogger('escraper.allegro')
 
@@ -22,22 +25,23 @@ class AllegroScraper:
         return allegro_config.get('url', 'https://allegrolokalnie.pl/oferty/q/iphone')
     
     async def scrape(self, context, channel):
-        page = await context.new_page()
-        await page.route("**/*.{png,jpg,jpeg,webp,gif,svg}", lambda route: route.abort())
-        
         try:
             logger.info("🔍 Rozpoczynam skanowanie Allegro Lokalnie...")
             logger.info(f"🔗 URL: {self.allegro_url}")
             
-            await page.goto(self.allegro_url, wait_until="domcontentloaded", timeout=30000)
-            logger.info("✅ Strona Allegro Lokalnie załadowana")
+            # Użyj cloudscraper zamiast Playwright
+            scraper = cloudscraper.create_scraper(
+                browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
+            )
             
-            # Poczekaj na załadowanie ofert
-            await asyncio.sleep(3)
+            response = scraper.get(self.allegro_url, timeout=30)
+            response.raise_for_status()
+            logger.info("✅ Strona Allegro Lokalnie pobrana")
+            
+            soup = BeautifulSoup(response.text, 'lxml')
             
             # Allegro Lokalnie używa article jako kontener oferty
-            await page.wait_for_selector('article', timeout=15000)
-            offers = await page.locator('article').all()
+            offers = soup.find_all('article')
             logger.info(f"📊 Znaleziono {len(offers)} ogłoszeń na stronie")
             
             # Statystyki
@@ -75,18 +79,23 @@ class AllegroScraper:
                         logger.debug(f"🚫 Model wyłączony: {title[:30]}")
                         continue
                     
-                    # Pobierz cenę - Allegro Lokalnie używa różnych selektorów
-                    price_el = offer.locator('[data-testid="listing-price"], .price, [class*="price"]')
-                    if await price_el.count() == 0:
+                    # Pobierz cenę
+                    price_el = offer.find(['span', 'div'], string=re.compile(r'\d+.*zł'))
+                    if not price_el:
+                        # Spróbuj alternatywnych selektorów
+                        price_el = offer.find(attrs={'data-testid': 'listing-price'})
+                    
+                    if not price_el:
                         stats['skipped_no_price'] += 1
                         continue
                     
-                    price_text = await price_el.first.inner_text()
-                    price_digits = ''.join(filter(str.isdigit, price_text.split(',')[0]))
+                    price_text = price_el.get_text(strip=True)
+                    price_digits = ''.join(filter(str.isdigit, price_text))
+                    
                     if not price_digits:
                         stats['skipped_no_price'] += 1
-                        logger.debug(f"⚠️ Brak ceny w tekście: {price_text}")
                         continue
+                    
                     price_val = int(price_digits)
                     
                     # Sprawdź budżet
@@ -96,21 +105,20 @@ class AllegroScraper:
                         continue
                     
                     # Pobierz URL
-                    link_el = offer.locator('a').first
-                    raw_href = await link_el.get_attribute('href')
-                    full_url = "https://allegrolokalnie.pl" + raw_href if "allegrolokalnie.pl" not in raw_href else raw_href
+                    link_el = offer.find('a')
+                    if not link_el:
+                        continue
+                    
+                    raw_href = link_el.get('href', '')
+                    full_url = "https://allegrolokalnie.pl" + raw_href if not raw_href.startswith('http') else raw_href
                     
                     # Usuń tylko hash, zostaw query params (potrzebne do działania linku)
                     url = full_url.split('#')[0]
                     
-                    # Pobierz opis (jeśli dostępny na liście)
-                    desc_el = offer.locator('[data-testid="listing-description"], .description, p')
-                    description = ""
-                    if await desc_el.count() > 0:
-                        try:
-                            description = await desc_el.first.inner_text(timeout=2000)
-                        except:
-                            description = title
+                    # Pobierz opis
+                    desc_el = offer.find(attrs={'data-testid': 'listing-description'}) or offer.find('p')
+                    if desc_el:
+                        description = desc_el.get_text(strip=True)
                     else:
                         description = title
                     
@@ -198,8 +206,8 @@ class AllegroScraper:
                     except Exception as de:
                         logger.error(f"❌ Błąd Discord: {de}")
                     
-                    # Zapisz do bazy (używając treści jako unique ID)
-                    self.db.add_offer(content, url, title, price_val, 'allegro')
+                    # Zapisz do bazy (używając 100 znaków opisu + cena jako unique ID)
+                    self.db.add_offer(content, price_val, url, title, 'allegro')
                     
                 except Exception as e:
                     logger.error(f"❌ Błąd przetwarzania oferty: {e}")
