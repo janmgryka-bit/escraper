@@ -79,3 +79,8 @@ class ConfigLoader:
     def get_enabled_sources(self):
         """Zwraca listę włączonych źródeł (olx, facebook, etc.)"""
         return [k for k, v in self.config['sources'].items() if v]
+    
+    def save(self):
+        """Zapisz aktualną konfigurację do pliku YAML"""
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
