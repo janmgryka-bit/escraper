@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import discord
 from discord.ext import commands
+from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 import logging
 

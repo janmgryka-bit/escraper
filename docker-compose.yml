@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  hunter-bot:
+    build: .
+    container_name: janek_hunter
+    restart: always
+    volumes:
+      - ./fb_data:/app/fb_data
+      - ./hunter_final.db:/app/hunter_final.db
+      - ./scraper.log:/app/scraper.log
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1

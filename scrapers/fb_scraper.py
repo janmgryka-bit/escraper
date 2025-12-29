@@ -4,8 +4,6 @@ from datetime import datetime
 import discord
 import logging
 import re
-import requests
-from bs4 import BeautifulSoup
 
 logger = logging.getLogger('escraper.fb')
 
@@ -61,15 +59,6 @@ class FacebookScraper:
         return hashlib.md5(unique_string.encode()).hexdigest()
     
     async def check_notifications(self, context, channel):
-        """
-        Facebook scraper using mobile headers (m.facebook.com) with requests.
-        Note: This requires valid FB session cookies. For now, we'll skip FB scraping.
-        """
-        logger.info("⚠️ Facebook scraper wyłączony - wymaga sesji cookies")
-        logger.info("💡 Użyj OLX i Allegro Lokalnie jako głównych źródeł")
-        return
-        
-    async def check_notifications_OLD(self, context, channel):
         """
         Sprawdza powiadomienia FB, wyciąga nazwę grupy i treść, 
         klika w post i skanuje pełną zawartość.
@@ -262,12 +251,6 @@ class FacebookScraper:
                                 logger.info(f"⏭️  FB: Brak ceny w poście - pomijam: {group_name}")
                                 continue
                             
-                            # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena
-                            if self.db.fb_notification_exists(full_content, price_val):
-                                stats['skipped_duplicate'] += 1
-                                logger.info(f"🔄 Duplikat FB (treść + cena): {group_name}")
-                                continue
-                            
                             # Sprawdź budżet
                             max_budget = self.config.get_max_budget()
                             if price_val > max_budget:
@@ -312,12 +295,8 @@ class FacebookScraper:
                                 color=color
                             )
                             
-                            # Pokaż PEŁNĄ treść (max 1500 znaków dla Discord)
-                            content_display = full_content[:1500]
-                            if len(full_content) > 1500:
-                                content_display += "..."
-                            
-                            embed.description = content_display
+                            # PEŁNY OPIS (do 4000 znaków zgodnie z limitem Discord)
+                            embed.description = full_content[:4000]
                             embed.add_field(name="📍 Grupa", value=group_name, inline=False)
                             
                             # Dodaj kalkulację jeśli jest

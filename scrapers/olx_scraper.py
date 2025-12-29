@@ -2,9 +2,6 @@ import asyncio
 from datetime import datetime
 import discord
 import logging
-import cloudscraper
-from bs4 import BeautifulSoup
-import re
 
 logger = logging.getLogger('escraper.olx')
 
@@ -42,23 +39,18 @@ class OLXScraper:
         return base_url + "?" + "&".join(params)
     
     async def scrape(self, context, channel):
+        page = await context.new_page()
+        await page.route("**/*.{png,jpg,jpeg,webp,gif,svg}", lambda route: route.abort())
+        
         try:
             logger.info("🔍 Rozpoczynam skanowanie OLX...")
             logger.info(f"🔗 URL: {self.olx_url}")
             
-            # Użyj cloudscraper zamiast Playwright
-            scraper = cloudscraper.create_scraper(
-                browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
-            )
+            await page.goto(self.olx_url, wait_until="commit", timeout=30000)
+            logger.info("✅ Strona OLX załadowana")
             
-            response = scraper.get(self.olx_url, timeout=30)
-            response.raise_for_status()
-            logger.info("✅ Strona OLX pobrana")
-            
-            soup = BeautifulSoup(response.text, 'lxml')
-            
-            # Znajdź wszystkie oferty
-            offers = soup.find_all('div', {'data-cy': 'l-card'})
+            await page.wait_for_selector('div[data-cy="l-card"]', timeout=15000)
+            offers = await page.locator('div[data-cy="l-card"]').all()
             logger.info(f"📊 Znaleziono {len(offers)} ogłoszeń na stronie")
             
             # Statystyki
@@ -83,18 +75,17 @@ class OLXScraper:
                     stats['checked'] += 1
                     
                     # Pobierz cenę
-                    price_el = offer.find('p', {'data-testid': 'ad-price'})
-                    if not price_el:
+                    price_el = offer.locator('p[data-testid="ad-price"]')
+                    if await price_el.count() == 0:
                         stats['skipped_no_price'] += 1
                         continue
                     
-                    price_text = price_el.get_text(strip=True)
-                    price_digits = ''.join(filter(str.isdigit, price_text))
-                    
+                    price_text = await price_el.inner_text()
+                    price_digits = ''.join(filter(str.isdigit, price_text.split(',')[0]))
                     if not price_digits:
                         stats['skipped_no_price'] += 1
+                        logger.debug(f"⚠️ Brak ceny w tekście: {price_text}")
                         continue
-                    
                     price_val = int(price_digits)
                     
                     # Sprawdź budżet
@@ -104,15 +95,12 @@ class OLXScraper:
                         continue
                     
                     # Pobierz URL
-                    link_el = offer.find('a')
-                    if not link_el:
-                        continue
-                    
-                    raw_href = link_el.get('href', '')
+                    link_el = offer.locator('a').first
+                    raw_href = await link_el.get_attribute('href')
                     url = ("https://www.olx.pl" + raw_href if "olx.pl" not in raw_href else raw_href).split('#')[0]
                     
                     # Pobierz tytuł i opis
-                    full_text = offer.get_text(separator='\n', strip=True)
+                    full_text = await offer.inner_text()
                     title = full_text.split('\n')[0]
                     
                     # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena
@@ -141,18 +129,19 @@ class OLXScraper:
                     profit_result['full_text'] = full_text
                     all_offers.append(profit_result)
                     
-                    # Pobierz zdjęcia dla AI (jeśli włączone)
+                    # Wyciągnij URL-e zdjęć (jeśli AI ma analizować obrazy)
                     image_urls = []
-                    if self.ai and self.ai.enabled:
+                    if self.ai and self.ai.enabled and self.ai.ai_config['checks'].get('analyze_images', False):
                         try:
-                            img_elements = offer.find_all('img')[:3]  # Max 3 zdjęcia
-                            for img in img_elements:
-                                img_url = img.get('src', '')
-                                if img_url and 'http' in img_url:
-                                    image_urls.append(img_url)
-                        except:
-                            pass
-                        logger.debug(f"📸 Znaleziono {len(image_urls)} zdjęć dla AI")
+                            img_elements = await offer.locator('img').all()
+                            for img in img_elements[:3]:  # Max 3 zdjęcia
+                                img_src = await img.get_attribute('src')
+                                if img_src and 'http' in img_src:
+                                    image_urls.append(img_src)
+                            if image_urls:
+                                logger.debug(f"📸 Znaleziono {len(image_urls)} zdjęć dla AI")
+                        except Exception as e:
+                            logger.debug(f"⚠️ Nie udało się pobrać zdjęć: {e}")
                     
                     # AI Analiza (opcjonalne)
                     ai_result = None
@@ -297,10 +286,11 @@ class OLXScraper:
                 f"brak_ceny={stats['skipped_no_price']}"
             )
                     
-        except Exception as e:
-            logger.error(f"❌ Błąd skanowania OLX: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+        except Exception as e: 
+            logger.error(f"❌ OLX Global Error: {e}")
+        finally: 
+            if not page.is_closed():
+                await page.close()
     
     async def _send_smart_match(self, channel, match, discord_config):
         """Wysyła propozycję inteligentnego połączenia na Discord"""
