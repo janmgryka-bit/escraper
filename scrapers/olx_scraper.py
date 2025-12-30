@@ -103,10 +103,54 @@ class OLXScraper:
                     full_text = await offer.inner_text()
                     title = full_text.split('\n')[0]
                     
-                    # Sprawdź duplikaty na podstawie content_hash (pancerne rozwiązanie)
-                    if self.db.offer_exists(title, price_val, full_text, location="Warszawa"):
+                    # PANCERNA BLOKADA DUPLIKATÓW - generuj content_id PRZED wszystkim
+                    description = full_text
+                    
+                    # Jeśli opis jest pusty, pobierz pełną stronę
+                    if not description or len(description.strip()) < 20:
+                        logger.debug(f"📄 [OLX] Opis za krótki, pobieram pełną stronę: {title[:30]}...")
+                        try:
+                            # Pobierz pełną stronę oferty
+                            page = await self.context.new_page()
+                            await page.goto(url, timeout=30000)
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            
+                            # Spróbuj wyciągnąć pełny opis
+                            desc_selectors = [
+                                'div[data-cy="ad_description"]',
+                                'div.description',
+                                '#description',
+                                '.description-content',
+                                'div[data-testid="ad-description"]'
+                            ]
+                            
+                            for desc_sel in desc_selectors:
+                                desc_el = page.locator(desc_sel)
+                                if await desc_el.count() > 0:
+                                    try:
+                                        full_desc = await desc_el.first.inner_text(timeout=3000)
+                                        if full_desc and len(full_desc.strip()) > 20:
+                                            description = full_desc
+                                            logger.debug(f"✅ [OLX] Pobrano pełny opis ({len(description)} znaków)")
+                                            break
+                                    except:
+                                        continue
+                            
+                            await page.close()
+                        except Exception as e:
+                            logger.warning(f"⚠️ [OLX] Nie udało się pobrać pełnego opisu: {e}")
+                    
+                    # Generuj content_id (pancerne rozwiązanie)
+                    content_id = f"{title}_{price_val}_Warszawa_{description[:100]}"
+                    # Usuń wszystkie białe znaki i małe litery
+                    content_id = "".join(content_id.lower().split())
+                    
+                    logger.debug(f"🔑 [OLX] content_id: {content_id[:50]}...")
+                    
+                    # Sprawdź duplikat w bazie PRZED kontynuacją
+                    if self.db.is_duplicate(content_id):
                         stats['skipped_duplicate'] += 1
-                        logger.debug(f"🔄 Duplikat (content_hash): {title[:30]}...")
+                        logger.debug(f"🔄 [OLX] Duplikat (content_id): {title[:30]}...")
                         continue
                     
                     # Sprawdź czy model jest włączony
@@ -244,9 +288,9 @@ class OLXScraper:
                     
                     embed.set_footer(text=f"OLX • Janek Hunter v6.0")
                     
-                    # Zapisz do bazy PRZED wysłaniem na Discord (pancerne rozwiązanie z content_hash)
-                    if not self.db.add_offer(title, price_val, full_text, url, location="Warszawa", source='olx'):
-                        logger.warning(f"⚠️ Oferta już istnieje w bazie (content_hash): {title[:30]}")
+                    # PANCERNE zapisanie do bazy PRZED wysłaniem na Discord (INSERT OR IGNORE)
+                    if not self.db.add_offer_with_content_id(content_id, title, price_val, description, url, location="Warszawa", source='olx'):
+                        logger.warning(f"⚠️ [OLX] Oferta już istnieje w bazie (content_id): {title[:30]}")
                         stats['skipped_duplicate'] += 1
                         continue
                     

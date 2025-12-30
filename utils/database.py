@@ -9,8 +9,9 @@ class Database:
     
     def init_db(self):
         conn = sqlite3.connect(self.db_path)
+        # PANCERNA baza danych z content_id jako UNIQUE
         conn.execute('''CREATE TABLE IF NOT EXISTS offers 
-                       (content_hash TEXT PRIMARY KEY, url TEXT, title TEXT, price TEXT, 
+                       (content_id TEXT UNIQUE, content_hash TEXT, url TEXT, title TEXT, price TEXT, 
                         source TEXT, date_added TEXT)''')
         conn.execute('''CREATE TABLE IF NOT EXISTS fb_notifications 
                        (notification_id TEXT PRIMARY KEY, group_name TEXT, content TEXT, 
@@ -50,6 +51,13 @@ class Database:
         
         return hash_result
     
+    def is_duplicate(self, content_id):
+        """PANCERNE sprawdzenie duplikatu na podstawie content_id"""
+        conn = sqlite3.connect(self.db_path)
+        result = conn.execute("SELECT 1 FROM offers WHERE content_id=?", (content_id,)).fetchone()
+        conn.close()
+        return result is not None
+    
     def offer_exists(self, title, price, description, location=None):
         """Sprawdź czy oferta istnieje na podstawie content_hash (pancerne rozwiązanie)"""
         content_hash = self.generate_content_hash(title, price, description, location)
@@ -57,6 +65,35 @@ class Database:
         result = conn.execute("SELECT 1 FROM offers WHERE content_hash=?", (content_hash,)).fetchone()
         conn.close()
         return result is not None
+    
+    def add_offer_with_content_id(self, content_id, title, price, description, url, location=None, source='olx'):
+        """PANCERNE dodawanie oferty z content_id - INSERT OR IGNORE"""
+        # Czyść URL - usuń wszystko po ?
+        clean_url = url.split('?')[0] if '?' in url else url
+        
+        conn = sqlite3.connect(self.db_path)
+        try:
+            # INSERT OR IGNORE - 100% pewności, że nie będzie duplikatów
+            conn.execute("""INSERT OR IGNORE INTO offers 
+                          (content_id, content_hash, url, title, price, source, date_added) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?)""", 
+                        (content_id, 
+                         self.generate_content_hash(title, price, description, location),
+                         clean_url, title, str(price), source, datetime.now().isoformat()))
+            conn.commit()
+            
+            # Sprawdź czy insert się powiódł
+            if conn.total_changes > 0:
+                print(f"DEBUG: Oferta zapisana do bazy: {content_id[:30]}...")
+                return True
+            else:
+                print(f"DEBUG: Oferta już istnieje (INSERT OR IGNORE): {content_id[:30]}...")
+                return False
+        except Exception as e:
+            print(f"DEBUG: Błąd zapisu oferty: {e}")
+            return False
+        finally:
+            conn.close()
     
     def add_offer(self, title, price, description, url, location=None, source='olx'):
         """Dodaj ofertę używając content_hash jako unique ID (pancerne rozwiązanie)"""
