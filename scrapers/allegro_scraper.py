@@ -114,11 +114,10 @@ class AllegroScraper:
                     else:
                         description = title
                     
-                    # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena + tytuł
-                    content = f"{title}\n{description}"
-                    if self.db.offer_exists(content, price_val, title):
+                    # Sprawdź duplikaty na podstawie content_hash (pancerne rozwiązanie)
+                    if self.db.offer_exists(title, price_val, description, location="Warszawa"):
                         stats['skipped_duplicate'] += 1
-                        logger.debug(f"🔄 Duplikat: {title[:30]}")
+                        logger.debug(f"🔄 Duplikat (content_hash): {title[:30]}")
                         continue
                     
                     # KALKULACJA OPŁACALNOŚCI
@@ -191,9 +190,9 @@ class AllegroScraper:
                     
                     embed.set_footer(text="Allegro Lokalnie • Janek Hunter v6.0")
                     
-                    # Zapisz do bazy PRZED wysłaniem na Discord (zapobiega duplikatom przy błędzie wysyłki)
-                    if not self.db.add_offer(content, price_val, url, title, 'allegro'):
-                        logger.warning(f"⚠️ Oferta już istnieje w bazie (race condition): {title[:30]}")
+                    # Zapisz do bazy PRZED wysłaniem na Discord (pancerne rozwiązanie z content_hash)
+                    if not self.db.add_offer(title, price_val, description, url, location="Warszawa", source='allegro'):
+                        logger.warning(f"⚠️ Oferta już istnieje w bazie (content_hash): {title[:30]}")
                         stats['skipped_duplicate'] += 1
                         continue
                     

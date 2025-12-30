@@ -18,46 +18,58 @@ class Database:
         conn.commit()
         conn.close()
     
-    def _create_content_hash(self, description, price=None, title=None):
-        """Tworzy hash z pierwszych 100 znaków opisu + cena + tytuł (bez białych znaków)"""
-        # Pierwsze 100 znaków opisu
-        desc_part = description[:100].lower().strip()
-        # Usuń WSZYSTKIE białe znaki (spacje, entery, taby)
+    def generate_content_hash(self, title, price, description, location=None):
+        """
+        Generuje unikalny hash oferty na podstawie tytułu, ceny, opisu i lokalizacji.
+        Pancerne rozwiązanie przeciw duplikatom - niezależne od URL.
+        """
+        # Tytuł - małe litery, bez spacji i znaków specjalnych
+        title_clean = "".join(title.lower().strip().split()) if title else ""
+        
+        # Cena - tylko cyfry (usuń zł, pln, spacje itp.)
+        price_clean = "".join(filter(str.isdigit, str(price))) if price else ""
+        
+        # Opis - pierwsze 150 znaków, małe litery, bez spacji i znaków specjalnych
+        desc_part = description[:150].lower().strip() if description else ""
         desc_clean = "".join(desc_part.split())
         
-        # Dodaj tytuł (również bez białych znaków)
-        if title:
-            title_clean = "".join(title.lower().strip().split())
-            desc_clean = f"{desc_clean}{title_clean}"
+        # Lokalizacja - jeśli podana
+        location_clean = "".join(location.lower().strip().split()) if location else ""
         
-        # Dodaj cenę jeśli podana
-        if price is not None:
-            unique_string = f"{desc_clean}{price}"
-        else:
-            unique_string = desc_clean
+        # Połącz wszystkie elementy w unikalny ciąg
+        unique_string = f"{title_clean}{price_clean}{desc_clean}{location_clean}"
         
+        # Generuj hash
         hash_result = hashlib.md5(unique_string.encode()).hexdigest()
-        print(f"DEBUG: content_hash = {hash_result[:8]}... (opis[:50]={description[:50]}, cena={price})")
+        
+        print(f"DEBUG: content_hash = {hash_result[:8]}...")
+        print(f"  - title_clean: {title_clean[:30]}...")
+        print(f"  - price_clean: {price_clean}")
+        print(f"  - desc_clean: {desc_clean[:50]}...")
+        print(f"  - location_clean: {location_clean[:20]}...")
+        
         return hash_result
     
-    def offer_exists(self, description, price, title=None):
-        """Sprawdź czy oferta istnieje na podstawie opisu (100 znaków) + cena + tytuł"""
-        content_hash = self._create_content_hash(description, price, title)
+    def offer_exists(self, title, price, description, location=None):
+        """Sprawdź czy oferta istnieje na podstawie content_hash (pancerne rozwiązanie)"""
+        content_hash = self.generate_content_hash(title, price, description, location)
         conn = sqlite3.connect(self.db_path)
         result = conn.execute("SELECT 1 FROM offers WHERE content_hash=?", (content_hash,)).fetchone()
         conn.close()
         return result is not None
     
-    def add_offer(self, description, price, url, title, source='olx'):
-        """Dodaj ofertę używając content_hash jako unique ID (100 znaków opisu + cena + tytuł)"""
-        content_hash = self._create_content_hash(description, price, title)
+    def add_offer(self, title, price, description, url, location=None, source='olx'):
+        """Dodaj ofertę używając content_hash jako unique ID (pancerne rozwiązanie)"""
+        content_hash = self.generate_content_hash(title, price, description, location)
         conn = sqlite3.connect(self.db_path)
         try:
             conn.execute("INSERT INTO offers (content_hash, url, title, price, source, date_added) VALUES (?, ?, ?, ?, ?, ?)", 
                         (content_hash, url, title, str(price), source, datetime.now().isoformat()))
             conn.commit()
+            print(f"DEBUG: Oferta zapisana do bazy: {content_hash[:8]}...")
             return True
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as e:
+            print(f"DEBUG: Oferta już istnieje (UNIQUE constraint): {content_hash[:8]}...")
             return False
         finally:
             conn.close()

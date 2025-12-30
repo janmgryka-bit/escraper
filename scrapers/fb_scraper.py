@@ -253,10 +253,10 @@ class FacebookScraper:
                                 logger.debug(f"🚫 Model wyłączony: {text[:30]}")
                                 continue
                             
-                            # Sprawdź duplikaty na podstawie opisu (100 znaków) + cena + tytuł (group_name)
-                            if self.db.fb_notification_exists(full_content, price_val, group_name):
+                            # Sprawdź duplikaty na podstawie content_hash (pancerne rozwiązanie)
+                            if self.db.offer_exists(group_name, price_val, full_content, location="Facebook"):
                                 stats['skipped_duplicate'] += 1
-                                logger.info(f"🔄 [FB] Duplikat (treść + cena + grupa): {group_name}")
+                                logger.info(f"🔄 [FB] Duplikat (content_hash): {group_name}")
                                 continue
                             
                             # Wyciągnij link do posta PRZED kliknięciem
@@ -448,9 +448,9 @@ class FacebookScraper:
                             except Exception as de:
                                 logger.error(f"❌ Błąd Discord: {de}")
                             
-                            # Zapisz do bazy PRZED wysłaniem na Discord (używając 100 znaków opisu + cena + grupa jako unique ID)
-                            if not self.db.add_fb_notification(full_content, price_val, group_name, post_url, group_name):
-                                logger.warning(f"⚠️ [FB] Powiadomienie już istnieje w bazie (race condition): {group_name}")
+                            # Zapisz do bazy PRZED wysłaniem na Discord (pancerne rozwiązanie z content_hash)
+                            if not self.db.add_offer(group_name, price_val, full_content, post_url, location="Facebook", source='facebook'):
+                                logger.warning(f"⚠️ [FB] Powiadomienie już istnieje w bazie (content_hash): {group_name}")
                                 stats['skipped_duplicate'] += 1
                                 continue
                             
