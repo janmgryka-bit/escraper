@@ -21,6 +21,9 @@ env/
 fb_data/
 chrome_profile/
 
+# Cookies
+fb_cookies.json
+
 # IDE
 .vscode/
 .idea/

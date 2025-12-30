@@ -207,16 +207,17 @@ async def on_ready():
     logger.info(f"📊 Konfiguracja załadowana z: config.yaml")
     logger.info(f"💬 Komendy: !start, !stop, !set_budget, !status")
     
-    # Inicjalizuj Playwright context przy starcie bota
+    # Inicjalizuj Playwright context przy starcie bota (cookie injection)
     logger.info("🌐 Inicjalizacja Playwright...")
-    print(f"DEBUG: Próba użycia sesji z folderu {FB_DATA_DIR}...")
+    print("DEBUG: Inicjalizuję context z cookie injection...")
     try:
         from playwright.async_api import async_playwright
+        import json
+        import os
+        
         p = await async_playwright().start()
-        context = await p.chromium.launch_persistent_context(
-            FB_DATA_DIR,
+        browser = await p.chromium.launch(
             headless=True,
-            user_agent=USER_AGENT,
             args=[
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -226,12 +227,27 @@ async def on_ready():
                 '--disable-extensions'
             ]
         )
+        
+        # Stwórz nowy context z User-Agent
+        context = await browser.new_context(user_agent=USER_AGENT)
+        
+        # Wczytaj i wstrzyknij ciasteczka
+        if os.path.exists('fb_cookies.json'):
+            print("DEBUG: Wczytuję ciasteczka z fb_cookies.json...")
+            with open('fb_cookies.json', 'r') as f:
+                cookies = json.load(f)
+            await context.add_cookies(cookies)
+            print(f"DEBUG: Wstrzyknięto {len(cookies)} ciasteczek")
+        else:
+            print("DEBUG: Brak pliku fb_cookies.json - kontynuuję bez ciasteczek")
+        
         bot_state["playwright_context"] = context
-        logger.info("✅ Playwright context gotowy (persistent session)")
-        print(f"DEBUG: Sesja z {FB_DATA_DIR} załadowana pomyślnie")
+        bot_state["playwright_browser"] = browser
+        logger.info("✅ Playwright context gotowy (cookie injection)")
+        print("DEBUG: Context z cookie injection gotowy")
     except Exception as e:
         logger.error(f"❌ Błąd inicjalizacji Playwright: {e}")
-        print(f"DEBUG: Błąd ładowania sesji z {FB_DATA_DIR}: {e}")
+        print(f"DEBUG: Błąd inicjalizacji context: {e}")
     
     logger.info(f"⏸️  Bot czeka na komendę !start")
 
