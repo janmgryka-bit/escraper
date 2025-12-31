@@ -260,7 +260,8 @@ async def on_ready():
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-software-rasterizer',
-                '--disable-extensions'
+                '--disable-extensions',
+                '--disable-web-security'  # HEADLESS CHECK - łatwiejsze ładowanie dynamicznych treści FB
             ]
         )
         

@@ -195,10 +195,17 @@ class FacebookScraper:
             logger.info("🔔 [FB] Idę bezpośrednio do powiadomień...")
             
             try:
-                # TIMEOUTS - krótsze timeouty dla FB
-                await page.goto("https://m.facebook.com/notifications", timeout=15000)
-                await page.wait_for_load_state("networkidle", timeout=8000)
-                logger.info("✅ [FB] Załadowano stronę powiadomień")
+                # NAPRAWA ŁADOWANIA FB - użyj domcontentloaded zamiast networkidle
+                await page.goto("https://m.facebook.com/notifications", timeout=15000, wait_until="domcontentloaded")
+                logger.info("✅ [FB] DOM załadowany, czekam na treść...")
+                
+                # Czekaj aż treść faktycznie się pojawi (nie logo Meta)
+                await page.wait_for_selector('text=Powiadomienia', timeout=20000)
+                logger.info("✅ [FB] Treść powiadomień załadowana")
+                
+                # Sztywne 3 sekundy na "odmrożenie" skryptów FB
+                await page.wait_for_timeout(3000)
+                logger.info("⏱️ [FB] Skrypty FB odmrożone")
                 
                 # DEBUG: Zrób screenshot listy powiadomień
                 await page.screenshot(path='fb_notifications.png')
@@ -321,28 +328,28 @@ class FacebookScraper:
                                 except Exception as e:
                                     logger.warning(f"⚠️ [FB] Nie udało się pobrać pełnej treści: {e}")
                                 
-                                # KROK 5: Wyodrębnij cenę z treści - POPRAWIONY REGEX
+                                # KROK 5: Wyodrębnij cenę z treści - PARSOWANIE CENY
                                 import re
-                                # FB NOTIFICATION PARSING FIX - priorytet dla 'zł', 'pln', 'złoty'
+                                # PARSOWANIE CENY - tylko 'zł', 'pln', 'cena', ignoruj 'GB'
                                 price_patterns = [
-                                    r'(\d+)\s*z[łl]',  # 1500 zł - NAJWYŻSZY PRIORYTET
-                                    r'(\d+)\s*pln',  # 1500 PLN - WYSOKI PRIORYTET
-                                    r'(\d+)\s*z[łl]ot[yey]',  # 1500 złoty/ złote/ złotych
-                                    r'cena[:\s]+(\d+)',  # cena: 1500
-                                    r'(\d+)\s*pln',  # 1500 PLN
-                                    # USUNIĘTO: r'(\d{3,5})(?!\d)' - zbyt agresywny, łapie GB/MAH
+                                    r'(\d+)\s*z[łl](?!\s*gb)',  # 1500 zł - ale nie 128 zł GB
+                                    r'(\d+)\s*pln(?!\s*gb)',  # 1500 PLN - ale nie 128 PLN GB
+                                    r'cena[:\s]+(\d+)(?!\s*gb)',  # cena: 1500 - ale nie cena: 128 GB
+                                    r'(\d+)\s*z[łl]ot[yey](?!\s*gb)',  # 1500 złoty - ale nie 128 złoty GB
                                 ]
                                 
                                 price_val = 0
                                 for pattern in price_patterns:
                                     match = re.search(pattern, full_content.lower())
                                     if match:
-                                        price_val = int(match.group(1))
-                                        logger.info(f"💰 [FB] Wyodrębniono cenę: {price_val}zł (pattern: {pattern})")
-                                        break
-                                
+                                        # Dodatkowa weryfikacja - upewnij się że nie ma 'gb' w pobliżu
+                                        price_text = match.group(0)
+                                        if 'gb' not in price_text.lower():
+                                            price_val = int(match.group(1))
+                                            logger.info(f"💰 [FB] Wyodrębniono cenę: {price_val}zł (text: '{price_text}')")
+                                            break
                                 if price_val == 0:
-                                    logger.info(f"⏭️  FB: Brak ceny w poście - pomijam: {group_name}")
+                                    logger.info(f"⏭️  FB: Brak prawidłowej ceny w poście - pomijam: {group_name}")
                                     continue
                             
                             # KROK 6: ABSOLUTE DUPLICATE LOCK - użyj get_offer_hash i commit_or_abort
