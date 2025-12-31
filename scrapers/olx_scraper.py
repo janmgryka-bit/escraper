@@ -108,8 +108,8 @@ class OLXScraper:
                     # ZAWSZE pobieraj pełną stronę dla opisu
                     description = ""
                     try:
-                        # Pobierz pełną stronę oferty
-                        page = await self.context.new_page()
+                        # Pobierz pełną stronę oferty - użyj poprawnego context
+                        page = await context.new_page()
                         await page.goto(url, timeout=30000)
                         await page.wait_for_load_state("networkidle", timeout=10000)
                         

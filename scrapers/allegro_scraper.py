@@ -114,11 +114,14 @@ class AllegroScraper:
                     else:
                         description = title
                     
-                    # Sprawdź duplikaty na podstawie content_hash (pancerne rozwiązanie)
-                    if self.db.offer_exists(title, price_val, description, location="Warszawa"):
+                    # ABSOLUTE DUPLICATE LOCK - użyj get_offer_hash i commit_or_abort
+                    content_hash = self.db.get_offer_hash(title, price_val, description, "Warszawa")
+                    
+                    # COMMIT OR ABORT LOGIC - IMMEDIATE DB INSERT
+                    if not self.db.commit_or_abort(content_hash, title, price_val, url):
                         stats['skipped_duplicate'] += 1
-                        logger.debug(f"🔄 Duplikat (content_hash): {title[:30]}")
-                        continue
+                        logger.info(f"🔄 [Allegro] ABORT - Duplicate detected: {title[:30]}")
+                        continue  # NATYCHMIASTOWE ABORT
                     
                     # KALKULACJA OPŁACALNOŚCI
                     profit_result = self.profit_calc.calculate(title, price_val, description)
@@ -190,11 +193,7 @@ class AllegroScraper:
                     
                     embed.set_footer(text="Allegro Lokalnie • Janek Hunter v6.0")
                     
-                    # Zapisz do bazy PRZED wysłaniem na Discord (pancerne rozwiązanie z content_hash)
-                    if not self.db.add_offer(title, price_val, description, url, location="Warszawa", source='allegro'):
-                        logger.warning(f"⚠️ Oferta już istnieje w bazie (content_hash): {title[:30]}")
-                        stats['skipped_duplicate'] += 1
-                        continue
+                    # JUŻ ZAPISANE W BAZIE PRZEZ commit_or_abort() - kontynuuj do Discord
                     
                     try:
                         await channel.send(embed=embed)

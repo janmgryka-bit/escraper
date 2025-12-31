@@ -199,35 +199,30 @@ class FacebookScraper:
             
             logger.info("✅ [FB] Sesja aktywna, szukam powiadomień...")
             
-            # KROK 1: Znajdź i kliknij dzwoneczek powiadomień
-            import re
-            logger.info("🔔 [FB] Szukam dzwoneczka powiadomień...")
+            # KROK 1: Idź bezpośrednio do powiadomień
+            logger.info("🔔 [FB] Idę bezpośrednio do powiadomień...")
             
             try:
-                # Spróbuj znaleźć dzwoneczek powiadomień
-                notification_bell = page.get_by_role("link", name=re.compile(r"notifications", re.I))
-                await notification_bell.wait_for(state="visible", timeout=10000)
-                logger.info("✅ [FB] Znaleziono dzwoneczek powiadomień")
-                
-                # Kliknij dzwoneczek
-                await notification_bell.click()
-                logger.info("🔔 [FB] Kliknięto dzwoneczek powiadomień")
-                await asyncio.sleep(3)  # Czekaj na załadowanie listy
+                # Idź bezpośrednio do strony powiadomień
+                await page.goto("https://m.facebook.com/notifications", timeout=30000)
+                await page.wait_for_load_state("networkidle", timeout=10000)
+                logger.info("✅ [FB] Załadowano stronę powiadomień")
                 
                 # DEBUG: Zrób screenshot listy powiadomień
                 await page.screenshot(path='fb_notifications.png')
                 logger.info("📸 [FB] Screenshot listy powiadomień zapisany jako fb_notifications.png")
                 
             except Exception as e:
-                logger.error(f"❌ [FB] Nie znaleziono dzwoneczka powiadomień: {e}")
+                logger.error(f"❌ [FB] Nie udało się załadować powiadomień: {e}")
                 await page.screenshot(path='fb_error.png')
                 logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
                 if channel:
-                    await channel.send("⚠️ **FB:** Nie znaleziono dzwoneczka powiadomień. Sprawdź fb_error.png")
+                    await channel.send("⚠️ **FB:** Nie udało się załadować powiadomień. Sprawdź fb_error.png")
                 return
             
-            # KROK 2: Przeszukaj listę powiadomień
+            # KROK 2: Przeszukaj listę powiadomień - użyj robust selector dla mobile
             notification_selectors = [
+                'xpath=//div[@id="notifications_list"]//a',  # Robust selector dla mobile
                 'div[role="article"]',
                 'div[role="listitem"]',
                 'a[role="link"][href*="/groups/"]',
