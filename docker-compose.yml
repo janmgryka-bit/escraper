@@ -16,3 +16,5 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+    # Fix dla Docker Compose - dodaj shm_size
+    shm_size: 2gb

@@ -70,9 +70,57 @@ async def main_loop():
             break
         
         try:
+            # BROWSER REWIND PRZED cyklem - tylko po pierwszym cyklu
+            if cycle > 0:
+                logger.info("🔄 BROWSER REWIND - zamykam stary context...")
+                try:
+                    old_context = bot_state.get("playwright_context")
+                    old_browser = bot_state.get("playwright_browser")
+                    
+                    if old_context:
+                        await old_context.close()
+                    if old_browser:
+                        await old_browser.close()
+                        
+                    logger.info("✅ Stary browser zamknięty")
+                    
+                    # Otwórz nowy browser
+                    from playwright.async_api import async_playwright
+                    import json
+                    import os
+                    
+                    p = await async_playwright().start()
+                    new_browser = await p.chromium.launch(
+                        headless=True,
+                        args=[
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-gpu',
+                            '--disable-software-rasterizer',
+                            '--disable-extensions',
+                            '--disable-web-security'
+                        ]
+                    )
+                    
+                    new_context = await new_browser.new_context(user_agent=USER_AGENT)
+                    
+                    # Wczytaj ciasteczka
+                    if os.path.exists('fb_cookies.json'):
+                        with open('fb_cookies.json', 'r') as f:
+                            cookies = json.load(f)
+                        await new_context.add_cookies(cookies)
+                    
+                    bot_state["playwright_context"] = new_context
+                    bot_state["playwright_browser"] = new_browser
+                    logger.info("✅ Nowy browser context otwarty")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Błąd podczas browser rewind: {e}")
+            
             # Przeładuj config co 10 cykli (auto-refresh)
             if cycle % 10 == 0:
-                logger.info("🔄 Przeładowuję konfigurację...")
+                logger.info("🔄 Przeładuję konfigurację...")
                 config.reload()
             
             # ASYNC ISOLATION - każdy scraper w osobnym try...except
@@ -135,53 +183,6 @@ async def main_loop():
                 else: status_parts.append("Allegro❌")
             
             logger.info(f"✅ Cykl #{cycle} zakończony: {', '.join(status_parts)}")
-            
-            # BROWSER REWIND - zamknij i otwórz nowy context po każdym cyklu
-            logger.info("🔄 BROWSER REWIND - zamykam stary context...")
-            try:
-                old_context = bot_state.get("playwright_context")
-                old_browser = bot_state.get("playwright_browser")
-                
-                if old_context:
-                    await old_context.close()
-                if old_browser:
-                    await old_browser.close()
-                    
-                logger.info("✅ Stary browser zamknięty")
-                
-                # Otwórz nowy browser
-                from playwright.async_api import async_playwright
-                import json
-                import os
-                
-                p = await async_playwright().start()
-                new_browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--disable-software-rasterizer',
-                        '--disable-extensions',
-                        '--disable-web-security'
-                    ]
-                )
-                
-                new_context = await new_browser.new_context(user_agent=USER_AGENT)
-                
-                # Wczytaj ciasteczka
-                if os.path.exists('fb_cookies.json'):
-                    with open('fb_cookies.json', 'r') as f:
-                        cookies = json.load(f)
-                    await new_context.add_cookies(cookies)
-                
-                bot_state["playwright_context"] = new_context
-                bot_state["playwright_browser"] = new_browser
-                logger.info("✅ Nowy browser context otwarty")
-                
-            except Exception as e:
-                logger.error(f"❌ Błąd podczas browser rewind: {e}")
         
         except Exception as e:
             logger.error(f"⚠️ Błąd w głównej pętli (cykl #{cycle}): {e}")

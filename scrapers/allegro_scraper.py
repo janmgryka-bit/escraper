@@ -162,7 +162,7 @@ class AllegroScraper:
                     )
                     
                     # PEŁNY OPIS (do 4000 znaków zgodnie z limitem Discord)
-                    embed.description = content[:4000]
+                    embed.description = description[:4000]
                     
                     # Dodaj kalkulację
                     if profit_result and discord_config['send_profit_calc']:
