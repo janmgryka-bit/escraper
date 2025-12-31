@@ -29,14 +29,15 @@ class AllegroScraper:
             logger.info("🔍 Rozpoczynam skanowanie Allegro Lokalnie...")
             logger.info(f"🔗 URL: {self.allegro_url}")
             
-            await page.goto(self.allegro_url, wait_until="domcontentloaded", timeout=30000)
+            # INCREASE TIMEOUTS - 60 sekund na polskie warunki sieciowe
+            await page.goto(self.allegro_url, wait_until="domcontentloaded", timeout=60000)
             logger.info("✅ Strona Allegro Lokalnie załadowana")
             
             # Poczekaj na załadowanie ofert
             await asyncio.sleep(3)
             
             # Allegro Lokalnie używa article jako kontener oferty
-            await page.wait_for_selector('article', timeout=15000)
+            await page.wait_for_selector('article', timeout=30000)
             offers = await page.locator('article').all()
             logger.info(f"📊 Znaleziono {len(offers)} ogłoszeń na stronie")
             

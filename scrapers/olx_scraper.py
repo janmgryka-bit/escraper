@@ -46,10 +46,11 @@ class OLXScraper:
             logger.info("🔍 Rozpoczynam skanowanie OLX...")
             logger.info(f"🔗 URL: {self.olx_url}")
             
-            await page.goto(self.olx_url, wait_until="commit", timeout=30000)
+            # INCREASE TIMEOUTS - 60 sekund na polskie warunki sieciowe
+            await page.goto(self.olx_url, wait_until="commit", timeout=60000)
             logger.info("✅ Strona OLX załadowana")
             
-            await page.wait_for_selector('div[data-cy="l-card"]', timeout=15000)
+            await page.wait_for_selector('div[data-cy="l-card"]', timeout=30000)
             offers = await page.locator('div[data-cy="l-card"]').all()
             logger.info(f"📊 Znaleziono {len(offers)} ogłoszeń na stronie")
             
@@ -110,8 +111,8 @@ class OLXScraper:
                     try:
                         # Pobierz pełną stronę oferty - użyj poprawnego context
                         page = await context.new_page()
-                        await page.goto(url, timeout=30000)
-                        await page.wait_for_load_state("networkidle", timeout=10000)
+                        await page.goto(url, timeout=60000)
+                        await page.wait_for_load_state("domcontentloaded", timeout=20000)
                         
                         # Spróbuj wyciągnąć pełny opis
                         desc_selectors = [

@@ -84,21 +84,29 @@ async def main_loop():
             try:
                 await fb_scraper.check_notifications(context, channel)
                 logger.info("✅ [FB] Scraper zakończony sukcesem")
+                # ASYNC SLEEP - pozwól Discordowi odetchnąć
+                await asyncio.sleep(0.1)
             except Exception as e:
                 fb_success = False
                 logger.error(f"❌ [FB] Błąd scrapera: {e}")
                 import traceback
                 logger.error(f"❌ [FB] Traceback: {traceback.format_exc()}")
+                # ASYNC SLEEP - pozwól Discordowi odetchnąć
+                await asyncio.sleep(0.1)
             
             # OLX scraper
             try:
                 await olx_scraper.scrape(context, channel)
                 logger.info("✅ [OLX] Scraper zakończony sukcesem")
+                # ASYNC SLEEP - pozwól Discordowi odetchnąć
+                await asyncio.sleep(0.1)
             except Exception as e:
                 olx_success = False
                 logger.error(f"❌ [OLX] Błąd scrapera: {e}")
                 import traceback
                 logger.error(f"❌ [OLX] Traceback: {traceback.format_exc()}")
+                # ASYNC SLEEP - pozwól Discordowi odetchnąć
+                await asyncio.sleep(0.1)
             
             # Allegro Lokalnie (jeśli włączone)
             allegro_config = config.config.get('sources', {}).get('allegro_lokalnie', {})
@@ -106,11 +114,15 @@ async def main_loop():
                 try:
                     await allegro_scraper.scrape(context, channel)
                     logger.info("✅ [Allegro] Scraper zakończony sukcesem")
+                    # ASYNC SLEEP - pozwól Discordowi odetchnąć
+                    await asyncio.sleep(0.1)
                 except Exception as e:
                     allegro_success = False
                     logger.error(f"❌ [Allegro] Błąd scrapera: {e}")
                     import traceback
                     logger.error(f"❌ [Allegro] Traceback: {traceback.format_exc()}")
+                    # ASYNC SLEEP - pozwól Discordowi odetchnąć
+                    await asyncio.sleep(0.1)
             
             # Podsumowanie cyklu
             status_parts = []
@@ -123,9 +135,65 @@ async def main_loop():
                 else: status_parts.append("Allegro❌")
             
             logger.info(f"✅ Cykl #{cycle} zakończony: {', '.join(status_parts)}")
+            
+            # BROWSER REWIND - zamknij i otwórz nowy context po każdym cyklu
+            logger.info("🔄 BROWSER REWIND - zamykam stary context...")
+            try:
+                old_context = bot_state.get("playwright_context")
+                old_browser = bot_state.get("playwright_browser")
+                
+                if old_context:
+                    await old_context.close()
+                if old_browser:
+                    await old_browser.close()
+                    
+                logger.info("✅ Stary browser zamknięty")
+                
+                # Otwórz nowy browser
+                from playwright.async_api import async_playwright
+                import json
+                import os
+                
+                p = await async_playwright().start()
+                new_browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--disable-software-rasterizer',
+                        '--disable-extensions',
+                        '--disable-web-security'
+                    ]
+                )
+                
+                new_context = await new_browser.new_context(user_agent=USER_AGENT)
+                
+                # Wczytaj ciasteczka
+                if os.path.exists('fb_cookies.json'):
+                    with open('fb_cookies.json', 'r') as f:
+                        cookies = json.load(f)
+                    await new_context.add_cookies(cookies)
+                
+                bot_state["playwright_context"] = new_context
+                bot_state["playwright_browser"] = new_browser
+                logger.info("✅ Nowy browser context otwarty")
+                
+            except Exception as e:
+                logger.error(f"❌ Błąd podczas browser rewind: {e}")
+        
         except Exception as e:
             logger.error(f"⚠️ Błąd w głównej pętli (cykl #{cycle}): {e}")
             await channel.send(f"⚠️ Błąd w głównej pętli: {str(e)[:100]}")
+        
+        # DOCKER RESOURCE CHECK - sprawdź pamięć RAM
+        try:
+            import psutil
+            memory = psutil.virtual_memory()
+            logger.info(f"💾 DOCKER RESOURCE CHECK - RAM: {memory.percent}% użyte ({memory.available//1024//1024}MB wolne)")
+        except Exception as e:
+            logger.debug(f"Nie można sprawdzić pamięci: {e}")
         
         # Pobierz interwał z konfiguracji
         min_wait, max_wait = config.get_check_interval()

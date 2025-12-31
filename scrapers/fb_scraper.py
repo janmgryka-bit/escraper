@@ -195,13 +195,20 @@ class FacebookScraper:
             logger.info("🔔 [FB] Idę bezpośrednio do powiadomień...")
             
             try:
-                # NAPRAWA ŁADOWANIA FB - użyj domcontentloaded zamiast networkidle
-                await page.goto("https://m.facebook.com/notifications", timeout=15000, wait_until="domcontentloaded")
+                # INCREASE TIMEOUTS - 60 sekund na polskie warunki sieciowe
+                await page.goto("https://m.facebook.com/notifications", timeout=60000, wait_until="domcontentloaded")
                 logger.info("✅ [FB] DOM załadowany, czekam na treść...")
                 
-                # Czekaj aż treść faktycznie się pojawi (nie logo Meta)
-                await page.wait_for_selector('text=Powiadomienia', timeout=20000)
-                logger.info("✅ [FB] Treść powiadomień załadowana")
+                # FB LOADING FIX - czekaj na selektor z obsługą błędu i refresh
+                try:
+                    await page.wait_for_selector('text=Powiadomienia', timeout=20000)
+                    logger.info("✅ [FB] Treść powiadomień załadowana")
+                except Exception as selector_error:
+                    logger.warning(f"⚠️ [FB] Selektor nie znaleziony, próbuję refresh: {selector_error}")
+                    await page.reload(timeout=30000, wait_until="domcontentloaded")
+                    await asyncio.sleep(2)
+                    await page.wait_for_selector('text=Powiadomienia', timeout=20000)
+                    logger.info("✅ [FB] Treść powiadomień załadowana po refresh")
                 
                 # Sztywne 3 sekundy na "odmrożenie" skryptów FB
                 await page.wait_for_timeout(3000)
