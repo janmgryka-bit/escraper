@@ -199,7 +199,34 @@ class FacebookScraper:
             
             logger.info("✅ [FB] Sesja aktywna, szukam powiadomień...")
             
-            # Próbuj różne selektory dla powiadomień
+            # KROK 1: Znajdź i kliknij dzwoneczek powiadomień
+            import re
+            logger.info("🔔 [FB] Szukam dzwoneczka powiadomień...")
+            
+            try:
+                # Spróbuj znaleźć dzwoneczek powiadomień
+                notification_bell = page.get_by_role("link", name=re.compile(r"notifications", re.I))
+                await notification_bell.wait_for(state="visible", timeout=10000)
+                logger.info("✅ [FB] Znaleziono dzwoneczek powiadomień")
+                
+                # Kliknij dzwoneczek
+                await notification_bell.click()
+                logger.info("🔔 [FB] Kliknięto dzwoneczek powiadomień")
+                await asyncio.sleep(3)  # Czekaj na załadowanie listy
+                
+                # DEBUG: Zrób screenshot listy powiadomień
+                await page.screenshot(path='fb_notifications.png')
+                logger.info("📸 [FB] Screenshot listy powiadomień zapisany jako fb_notifications.png")
+                
+            except Exception as e:
+                logger.error(f"❌ [FB] Nie znaleziono dzwoneczka powiadomień: {e}")
+                await page.screenshot(path='fb_error.png')
+                logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
+                if channel:
+                    await channel.send("⚠️ **FB:** Nie znaleziono dzwoneczka powiadomień. Sprawdź fb_error.png")
+                return
+            
+            # KROK 2: Przeszukaj listę powiadomień
             notification_selectors = [
                 'div[role="article"]',
                 'div[role="listitem"]',
@@ -233,8 +260,17 @@ class FacebookScraper:
                             notif = notif_locator.nth(i)
                             text = await notif.inner_text(timeout=5000)
                             
-                            # Sprawdź czy to powiadomienie z grupy
-                            if "w grupie" not in text.lower() and "group" not in text.lower():
+                            # KROK 3: Sprawdź czy to powiadomienie o sprzedaży
+                            sales_keywords = ['dodał post', 'added a post', 'sprzedam', 'nowa oferta', 'for sale', 'na sprzedaż']
+                            is_sales_notification = any(keyword in text.lower() for keyword in sales_keywords)
+                            
+                            if not is_sales_notification:
+                                stats['skipped_irrelevant'] += 1
+                                logger.debug(f"🚫 [FB] Nie jest powiadomieniem o sprzedaży: {text[:50]}...")
+                                continue
+                            
+                            # Sprawdź czy zawiera "iphone"
+                            if "iphone" not in text.lower():
                                 stats['skipped_irrelevant'] += 1
                                 continue
                             
@@ -242,10 +278,7 @@ class FacebookScraper:
                             group_name = self._extract_group_name(text)
                             preview = self._extract_post_preview(text)
                             
-                            # Sprawdź czy zawiera "iphone"
-                            if "iphone" not in text.lower():
-                                stats['skipped_irrelevant'] += 1
-                                continue
+                            logger.info(f"🎯 [FB] Znaleziono powiadomienie o sprzedaży: {group_name} - {preview[:50]}...")
                             
                             # Sprawdź czy model jest włączony
                             if not self.config.is_model_enabled(text):
@@ -253,43 +286,7 @@ class FacebookScraper:
                                 logger.debug(f"🚫 Model wyłączony: {text[:30]}")
                                 continue
                             
-                            # Sprawdź duplikaty na podstawie content_hash (pancerne rozwiązanie)
-                            if self.db.offer_exists(group_name, price_val, full_content, location="Facebook"):
-                                stats['skipped_duplicate'] += 1
-                                logger.info(f"🔄 [FB] Duplikat (content_hash): {group_name}")
-                                continue
-                            
-                            # Wyciągnij link do posta PRZED kliknięciem
-                            post_url = None
-                            notification_id = None
-                            full_content = preview
-                            price_val = 0
-                            
-                            try:
-                                import re
-                                # Spróbuj znaleźć link w powiadomieniu (href)
-                                notif_html = await notif.inner_html()
-                                href_match = re.search(r'href="([^"]*(?:/posts/|/permalink/|story_fbid=)[^"]*)"', notif_html)
-                                
-                                if href_match:
-                                    raw_url = href_match.group(1).replace('&amp;', '&')
-                                    # Wyciągnij post_id i group_id
-                                    post_match = re.search(r'/posts/(\d+)', raw_url) or re.search(r'/permalink/(\d+)', raw_url) or re.search(r'story_fbid=(\d+)', raw_url)
-                                    group_match = re.search(r'/groups/(\d+)', raw_url)
-                                    
-                                    if post_match and group_match:
-                                        post_url = f"https://www.facebook.com/groups/{group_match.group(1)}/posts/{post_match.group(1)}/"
-                                        logger.info(f"   📍 Post URL: {post_url}")
-                                        
-                                        # Użyj post_url jako unique ID
-                                        notification_id = hashlib.md5(post_url.encode()).hexdigest()
-                            except Exception as e:
-                                logger.debug(f"   ⚠️ Błąd wyciągania URL: {e}")
-                            
-                            # Pomiń jeśli duplikat
-                            if is_duplicate:
-                                continue
-                            
+                            # KROK 4: Kliknij powiadomienie aby otworzyć post
                             try:
                                 # Przewiń element do widoku i kliknij
                                 await notif.scroll_into_view_if_needed(timeout=3000)
@@ -297,62 +294,88 @@ class FacebookScraper:
                                 await notif.click(timeout=10000, force=True)
                                 await asyncio.sleep(3)
                                 
+                                logger.info(f"🔗 [FB] Kliknięto powiadomienie, otwieram post...")
+                                
                                 # Pobierz rzeczywisty URL po kliknięciu
                                 current_url = page.url
                                 logger.info(f"   📍 Obecny URL: {current_url}")
                                 
-                                # Jeśli post_url nie został wyciągnięty wcześniej, spróbuj teraz
-                                if not post_url and ("groups" in current_url or "posts" in current_url):
-                                    import re
-                                    post_match = re.search(r'/posts/(\d+)', current_url) or re.search(r'/permalink/(\d+)', current_url)
-                                    group_match = re.search(r'/groups/(\d+)', current_url)
-                                    
-                                    if post_match and group_match:
-                                        post_url = f"https://www.facebook.com/groups/{group_match.group(1)}/posts/{post_match.group(1)}/"
-                                        logger.info(f"   ✅ Wyciągnięto post_url z URL: {post_url}")
+                                # Spróbuj wyciągnąć pełną treść posta
+                                full_content = preview
+                                post_url = current_url
+                                
+                                try:
+                                    # Sprawdź czy jesteśmy w poście
+                                    if "posts" in current_url or "permalink" in current_url:
+                                        logger.info(f"📄 [FB] Jesteśmy w poście, pobieram treść...")
                                         
-                                        # Zaktualizuj notification_id jeśli nie było
-                                        if not notification_id:
-                                            notification_id = hashlib.md5(post_url.encode()).hexdigest()
+                                        # Poczekaj na załadowanie treści
+                                        await page.wait_for_load_state("networkidle", timeout=5000)
+                                        
+                                        # Spróbuj wyciągnąć pełną treść posta
+                                        content_selectors = [
+                                            'div[data-ad-preview="message"]',
+                                            'div[data-testid="post_message"]',
+                                            'div.x1i10hfl',
+                                            'div.x1n2onr6'
+                                        ]
+                                        
+                                        for content_sel in content_selectors:
+                                            content_el = page.locator(content_sel)
+                                            if await content_el.count() > 0:
+                                                try:
+                                                    post_text = await content_el.first.inner_text(timeout=3000)
+                                                    if post_text and len(post_text.strip()) > 50:
+                                                        full_content = post_text
+                                                        logger.info(f"✅ [FB] Pobrano pełną treść posta ({len(full_content)} znaków)")
+                                                        break
+                                                except:
+                                                    continue
+                                except Exception as e:
+                                    logger.warning(f"⚠️ [FB] Nie udało się pobrać pełnej treści: {e}")
                                 
-                                # Poczekaj na załadowanie treści posta
-                                await asyncio.sleep(3)
-                                
-                                # Spróbuj wyciągnąć PEŁNĄ treść posta
-                                post_selectors = [
-                                    'div[data-ad-preview="message"]',
-                                    'div[data-ad-comet-preview="message"]',
-                                    'div[role="article"] div[dir="auto"]',
-                                    'div.x11i5rnm',
-                                    'div[data-ad-rendering-role="body"]'
+                                # KROK 5: Wyodrębnij cenę z treści
+                                import re
+                                price_patterns = [
+                                    r'(\d+)\s*z[łl]',  # 1500 zł
+                                    r'cena[:\s]+(\d+)',  # cena: 1500
+                                    r'(\d+)\s*pln',  # 1500 PLN
+                                    r'(\d{3,5})(?!\d)',  # same cyfry 3-5 (np. 1500)
                                 ]
                                 
-                                content_parts = []
-                                for post_selector in post_selectors:
-                                    content_locators = page.locator(post_selector)
-                                    count = await content_locators.count()
-                                    if count > 0:
-                                        # Zbierz tekst ze wszystkich pasujących elementów
-                                        for i in range(min(count, 10)):
-                                            try:
-                                                text = await content_locators.nth(i).inner_text(timeout=2000)
-                                                if text and len(text) > 20:
-                                                    content_parts.append(text)
-                                            except:
-                                                continue
-                                        if content_parts:
-                                            break
+                                price_val = 0
+                                for pattern in price_patterns:
+                                    match = re.search(pattern, full_content.lower())
+                                    if match:
+                                        price_val = int(match.group(1))
+                                        logger.info(f"� [FB] Wyodrębniono cenę: {price_val}zł")
+                                        break
                                 
-                                if content_parts:
-                                    full_content = "\n\n".join(content_parts)
-                                    logger.info(f"   ✅ Zeskanowano treść posta ({len(full_content)} znaków)")
-                                else:
-                                    logger.warning(f"   ⚠️ Nie znaleziono treści posta, używam preview")
-                                    full_content = preview
+                                if price_val == 0:
+                                    logger.info(f"⏭️  FB: Brak ceny w poście - pomijam: {group_name}")
+                                    continue
+                            
+                            # KROK 6: ABSOLUTE DUPLICATE LOCK - użyj get_offer_hash i commit_or_abort
+                                content_hash = self.db.get_offer_hash(group_name, price_val, full_content, "Facebook")
                                 
-                                # Wróć do powiadomień
-                                await page.goto(self.fb_notifications_url)
-                                await asyncio.sleep(2)
+                                # COMMIT OR ABORT LOGIC - IMMEDIATE DB INSERT
+                                if not self.db.commit_or_abort(content_hash, group_name, price_val, post_url):
+                                    stats['skipped_duplicate'] += 1
+                                    logger.info(f"� [FB] ABORT - Duplicate detected: {group_name}")
+                                    # Wróć do listy powiadomień
+                                    await page.goto(self.fb_notifications_url)
+                                    await asyncio.sleep(2)
+                                    continue  # NATYCHMIASTOWE ABORT
+                                
+                                # Sprawdź budżet
+                                max_budget = self.config.get_max_budget()
+                                if price_val > max_budget:
+                                    stats['skipped_irrelevant'] += 1
+                                    logger.debug(f"💰 FB: Poza budżetem: {price_val}zł > {max_budget}zł")
+                                    # Wróć do listy powiadomień
+                                    await page.goto(self.fb_notifications_url)
+                                    await asyncio.sleep(2)
+                                    continue
                                     
                             except Exception as e:
                                 logger.warning(f"   ⚠️ Nie udało się otworzyć posta: {e}")
