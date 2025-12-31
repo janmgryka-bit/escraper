@@ -152,48 +152,40 @@ class FacebookScraper:
             password_check = await page.locator('input[name="pass"]').count()
             
             if login_check > 0 and password_check > 0:
-                logger.warning("⚠️ [FB] Wykryto formularz logowania - próbuję automatycznego logowania...")
+                logger.warning("⚠️ [FB] Wykryto formularz logowania - próbuję odzyskać sesję...")
                 
-                # Spróbuj zalogować się automatycznie z .env
+                # FB SESSION RECOVERY - spróbuj ponownie wstrzyknąć ciasteczka
                 import os
-                fb_email = os.getenv('FB_EMAIL')
-                fb_password = os.getenv('FB_PASSWORD')
+                import json
                 
-                if fb_email and fb_password:
+                if os.path.exists('fb_cookies.json'):
+                    logger.info("🔄 [FB] Próbuję ponownie wstrzyknąć ciasteczka...")
                     try:
-                        logger.info("🔐 [FB] Próba automatycznego logowania...")
-                        await page.fill('input[name="email"]', fb_email)
-                        await asyncio.sleep(1)
-                        await page.fill('input[name="pass"]', fb_password)
-                        await asyncio.sleep(1)
-                        await page.click('button[name="login"], input[name="login"]')
-                        logger.info("⏳ [FB] Czekam na zalogowanie...")
-                        await asyncio.sleep(5)
+                        with open('fb_cookies.json', 'r') as f:
+                            cookies = json.load(f)
+                        await context.add_cookies(cookies)
+                        logger.info("✅ [FB] Ciasteczka ponownie wstrzyknięte")
                         
-                        # Sprawdź czy logowanie się powiodło
-                        if await page.locator('input[name="email"]').count() > 0:
-                            logger.error("❌ [FB] Automatyczne logowanie nie powiodło się")
-                            await page.screenshot(path='fb_error.png')
-                            logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
-                            if channel:
-                                await channel.send("⚠️ **Sesja FB wygasła!** Automatyczne logowanie nie powiodło się. Uruchom: `docker exec -it janek_hunter python fb_login.py`")
+                        # Odśwież stronę
+                        await page.reload(timeout=15000)
+                        await asyncio.sleep(3)
+                        
+                        # Sprawdź czy zalogowano
+                        login_check_after = await page.locator('input[name="email"]').count()
+                        if login_check_after == 0:
+                            logger.info("✅ [FB] Sesja odzyskana!")
+                        else:
+                            logger.error("❌ [FB] Nie udało się odzyskać sesji - pomijam FB w tym cyklu")
                             await page.close()
                             return
-                        else:
-                            logger.info("✅ [FB] Automatyczne logowanie powiodło się!")
                     except Exception as e:
-                        logger.error(f"❌ [FB] Błąd automatycznego logowania: {e}")
-                        await page.screenshot(path='fb_error.png')
-                        if channel:
-                            await channel.send("⚠️ **Sesja FB wygasła!** Uruchom: `docker exec -it janek_hunter python fb_login.py`")
+                        logger.error(f"❌ [FB] Błąd odzyskiwania sesji: {e}")
+                        logger.error("❌ [FB] Pomijam FB w tym cyklu - OLX/Allegro będą działać")
                         await page.close()
                         return
                 else:
-                    logger.error("❌ [FB] Brak FB_EMAIL/FB_PASSWORD w .env - nie mogę zalogować automatycznie")
-                    await page.screenshot(path='fb_error.png')
-                    logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
-                    if channel:
-                        await channel.send("⚠️ **Sesja FB wygasła!** Dodaj FB_EMAIL i FB_PASSWORD do .env, potem uruchom: `docker exec -it janek_hunter python fb_login.py`")
+                    logger.error("❌ [FB] Brak fb_cookies.json - pomijam FB w tym cyklu")
+                    logger.error("❌ [FB] Uruchom: `docker exec -it janek_hunter python fb_login.py`")
                     await page.close()
                     return
             
@@ -203,9 +195,9 @@ class FacebookScraper:
             logger.info("🔔 [FB] Idę bezpośrednio do powiadomień...")
             
             try:
-                # Idź bezpośrednio do strony powiadomień
-                await page.goto("https://m.facebook.com/notifications", timeout=30000)
-                await page.wait_for_load_state("networkidle", timeout=10000)
+                # TIMEOUTS - krótsze timeouty dla FB
+                await page.goto("https://m.facebook.com/notifications", timeout=15000)
+                await page.wait_for_load_state("networkidle", timeout=8000)
                 logger.info("✅ [FB] Załadowano stronę powiadomień")
                 
                 # DEBUG: Zrób screenshot listy powiadomień
@@ -213,11 +205,11 @@ class FacebookScraper:
                 logger.info("📸 [FB] Screenshot listy powiadomień zapisany jako fb_notifications.png")
                 
             except Exception as e:
-                logger.error(f"❌ [FB] Nie udało się załadować powiadomień: {e}")
+                logger.error(f"❌ [FB] Timeout lub błąd ładowania powiadomień: {e}")
+                logger.error("❌ [FB] Pomijam FB w tym cyklu - OLX/Allegro będą działać")
                 await page.screenshot(path='fb_error.png')
                 logger.info("📸 [FB] Screenshot błędu zapisany jako fb_error.png")
-                if channel:
-                    await channel.send("⚠️ **FB:** Nie udało się załadować powiadomień. Sprawdź fb_error.png")
+                await page.close()
                 return
             
             # KROK 2: Przeszukaj listę powiadomień - użyj robust selector dla mobile
@@ -329,13 +321,16 @@ class FacebookScraper:
                                 except Exception as e:
                                     logger.warning(f"⚠️ [FB] Nie udało się pobrać pełnej treści: {e}")
                                 
-                                # KROK 5: Wyodrębnij cenę z treści
+                                # KROK 5: Wyodrębnij cenę z treści - POPRAWIONY REGEX
                                 import re
+                                # FB NOTIFICATION PARSING FIX - priorytet dla 'zł', 'pln', 'złoty'
                                 price_patterns = [
-                                    r'(\d+)\s*z[łl]',  # 1500 zł
+                                    r'(\d+)\s*z[łl]',  # 1500 zł - NAJWYŻSZY PRIORYTET
+                                    r'(\d+)\s*pln',  # 1500 PLN - WYSOKI PRIORYTET
+                                    r'(\d+)\s*z[łl]ot[yey]',  # 1500 złoty/ złote/ złotych
                                     r'cena[:\s]+(\d+)',  # cena: 1500
                                     r'(\d+)\s*pln',  # 1500 PLN
-                                    r'(\d{3,5})(?!\d)',  # same cyfry 3-5 (np. 1500)
+                                    # USUNIĘTO: r'(\d{3,5})(?!\d)' - zbyt agresywny, łapie GB/MAH
                                 ]
                                 
                                 price_val = 0
@@ -343,7 +338,7 @@ class FacebookScraper:
                                     match = re.search(pattern, full_content.lower())
                                     if match:
                                         price_val = int(match.group(1))
-                                        logger.info(f"� [FB] Wyodrębniono cenę: {price_val}zł")
+                                        logger.info(f"💰 [FB] Wyodrębniono cenę: {price_val}zł (pattern: {pattern})")
                                         break
                                 
                                 if price_val == 0:

@@ -75,18 +75,54 @@ async def main_loop():
                 logger.info("🔄 Przeładowuję konfigurację...")
                 config.reload()
             
+            # ASYNC ISOLATION - każdy scraper w osobnym try...except
+            fb_success = True
+            olx_success = True
+            allegro_success = True
+            
             # Facebook notifications
-            await fb_scraper.check_notifications(context, channel)
+            try:
+                await fb_scraper.check_notifications(context, channel)
+                logger.info("✅ [FB] Scraper zakończony sukcesem")
+            except Exception as e:
+                fb_success = False
+                logger.error(f"❌ [FB] Błąd scrapera: {e}")
+                import traceback
+                logger.error(f"❌ [FB] Traceback: {traceback.format_exc()}")
             
             # OLX scraper
-            await olx_scraper.scrape(context, channel)
+            try:
+                await olx_scraper.scrape(context, channel)
+                logger.info("✅ [OLX] Scraper zakończony sukcesem")
+            except Exception as e:
+                olx_success = False
+                logger.error(f"❌ [OLX] Błąd scrapera: {e}")
+                import traceback
+                logger.error(f"❌ [OLX] Traceback: {traceback.format_exc()}")
             
             # Allegro Lokalnie (jeśli włączone)
             allegro_config = config.config.get('sources', {}).get('allegro_lokalnie', {})
             if allegro_config.get('enabled', False):
-                await allegro_scraper.scrape(context, channel)
+                try:
+                    await allegro_scraper.scrape(context, channel)
+                    logger.info("✅ [Allegro] Scraper zakończony sukcesem")
+                except Exception as e:
+                    allegro_success = False
+                    logger.error(f"❌ [Allegro] Błąd scrapera: {e}")
+                    import traceback
+                    logger.error(f"❌ [Allegro] Traceback: {traceback.format_exc()}")
             
-            logger.info(f"✅ Cykl #{cycle} zakończony pomyślnie")
+            # Podsumowanie cyklu
+            status_parts = []
+            if fb_success: status_parts.append("FB✅")
+            else: status_parts.append("FB❌")
+            if olx_success: status_parts.append("OLX✅")
+            else: status_parts.append("OLX❌")
+            if allegro_config.get('enabled', False):
+                if allegro_success: status_parts.append("Allegro✅")
+                else: status_parts.append("Allegro❌")
+            
+            logger.info(f"✅ Cykl #{cycle} zakończony: {', '.join(status_parts)}")
         except Exception as e:
             logger.error(f"⚠️ Błąd w głównej pętli (cykl #{cycle}): {e}")
             await channel.send(f"⚠️ Błąd w głównej pętli: {str(e)[:100]}")
