@@ -9,104 +9,58 @@ class Database:
     
     def init_db(self):
         conn = sqlite3.connect(self.db_path)
-        # PANCERNA baza danych z content_id jako UNIQUE
-        conn.execute('''CREATE TABLE IF NOT EXISTS offers 
-                       (content_id TEXT UNIQUE, content_hash TEXT, url TEXT, title TEXT, price TEXT, 
-                        source TEXT, date_added TEXT)''')
+        # ABSOLUTE DUPLICATE LOCK - content_hash jako PRIMARY KEY
+        conn.execute('''DROP TABLE IF EXISTS offers''')  # Wyczyść starą tabelę
+        conn.execute('''CREATE TABLE offers 
+                       (content_hash TEXT PRIMARY KEY, title TEXT, price REAL, url TEXT, 
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
         conn.execute('''CREATE TABLE IF NOT EXISTS fb_notifications 
                        (notification_id TEXT PRIMARY KEY, group_name TEXT, content TEXT, 
                         post_url TEXT, date_added TEXT)''')
         conn.commit()
         conn.close()
     
-    def generate_content_hash(self, title, price, description, location=None):
+    def get_offer_hash(self, title, price, description, location=""):
         """
-        Generuje unikalny hash oferty na podstawie tytułu, ceny, opisu i lokalizacji.
-        Pancerne rozwiązanie przeciw duplikatom - niezależne od URL.
+        GLOBAL HASHING ENGINE - ABSOLUTE DUPLICATE LOCK
         """
-        # Tytuł - małe litery, bez spacji i znaków specjalnych
-        title_clean = "".join(title.lower().strip().split()) if title else ""
+        # Połącz wszystkie elementy
+        hash_string = f"{title.lower()}{str(price)}{description[:100].lower()}{location.lower()}"
         
-        # Cena - tylko cyfry (usuń zł, pln, spacje itp.)
-        price_clean = "".join(filter(str.isdigit, str(price))) if price else ""
-        
-        # Opis - pierwsze 150 znaków, małe litery, bez spacji i znaków specjalnych
-        desc_part = description[:150].lower().strip() if description else ""
-        desc_clean = "".join(desc_part.split())
-        
-        # Lokalizacja - jeśli podana
-        location_clean = "".join(location.lower().strip().split()) if location else ""
-        
-        # Połącz wszystkie elementy w unikalny ciąg
-        unique_string = f"{title_clean}{price_clean}{desc_clean}{location_clean}"
+        # Usuń WSZYSTKIE spacje i znaki specjalne
+        import re
+        hash_string = re.sub(r'[^a-z0-9]', '', hash_string)
         
         # Generuj hash
-        hash_result = hashlib.md5(unique_string.encode()).hexdigest()
+        content_hash = hashlib.md5(hash_string.encode()).hexdigest()
         
-        print(f"DEBUG: content_hash = {hash_result[:8]}...")
-        print(f"  - title_clean: {title_clean[:30]}...")
-        print(f"  - price_clean: {price_clean}")
-        print(f"  - desc_clean: {desc_clean[:50]}...")
-        print(f"  - location_clean: {location_clean[:20]}...")
+        print(f"DEBUG: get_offer_hash = {content_hash[:12]}...")
+        print(f"  - title: {title.lower()[:30]}")
+        print(f"  - price: {price}")
+        print(f"  - desc[:100]: {description[:100].lower()[:50]}...")
+        print(f"  - location: {location.lower()}")
+        print(f"  - clean_string: {hash_string[:50]}...")
         
-        return hash_result
+        return content_hash
     
-    def is_duplicate(self, content_id):
-        """PANCERNE sprawdzenie duplikatu na podstawie content_id"""
-        conn = sqlite3.connect(self.db_path)
-        result = conn.execute("SELECT 1 FROM offers WHERE content_id=?", (content_id,)).fetchone()
-        conn.close()
-        return result is not None
-    
-    def offer_exists(self, title, price, description, location=None):
-        """Sprawdź czy oferta istnieje na podstawie content_hash (pancerne rozwiązanie)"""
-        content_hash = self.generate_content_hash(title, price, description, location)
-        conn = sqlite3.connect(self.db_path)
-        result = conn.execute("SELECT 1 FROM offers WHERE content_hash=?", (content_hash,)).fetchone()
-        conn.close()
-        return result is not None
-    
-    def add_offer_with_content_id(self, content_id, title, price, description, url, location=None, source='olx'):
-        """PANCERNE dodawanie oferty z content_id - INSERT OR IGNORE"""
-        # Czyść URL - usuń wszystko po ?
-        clean_url = url.split('?')[0] if '?' in url else url
-        
+    def commit_or_abort(self, content_hash, title, price, url):
+        """
+        COMMIT OR ABORT LOGIC - ABSOLUTE DUPLICATE LOCK
+        Zwraca True jeśli sukces, False jeśli duplikat
+        """
         conn = sqlite3.connect(self.db_path)
         try:
-            # INSERT OR IGNORE - 100% pewności, że nie będzie duplikatów
-            conn.execute("""INSERT OR IGNORE INTO offers 
-                          (content_id, content_hash, url, title, price, source, date_added) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?)""", 
-                        (content_id, 
-                         self.generate_content_hash(title, price, description, location),
-                         clean_url, title, str(price), source, datetime.now().isoformat()))
+            # Próba wstawienia - jeśli content_hash istnieje, IntegrityError
+            conn.execute("INSERT INTO offers (content_hash, title, price, url) VALUES (?, ?, ?, ?)", 
+                        (content_hash, title, float(price), url))
             conn.commit()
-            
-            # Sprawdź czy insert się powiódł
-            if conn.total_changes > 0:
-                print(f"DEBUG: Oferta zapisana do bazy: {content_id[:30]}...")
-                return True
-            else:
-                print(f"DEBUG: Oferta już istnieje (INSERT OR IGNORE): {content_id[:30]}...")
-                return False
-        except Exception as e:
-            print(f"DEBUG: Błąd zapisu oferty: {e}")
-            return False
-        finally:
-            conn.close()
-    
-    def add_offer(self, title, price, description, url, location=None, source='olx'):
-        """Dodaj ofertę używając content_hash jako unique ID (pancerne rozwiązanie)"""
-        content_hash = self.generate_content_hash(title, price, description, location)
-        conn = sqlite3.connect(self.db_path)
-        try:
-            conn.execute("INSERT INTO offers (content_hash, url, title, price, source, date_added) VALUES (?, ?, ?, ?, ?, ?)", 
-                        (content_hash, url, title, str(price), source, datetime.now().isoformat()))
-            conn.commit()
-            print(f"DEBUG: Oferta zapisana do bazy: {content_hash[:8]}...")
+            print(f"DEBUG: COMMIT SUCCESS - {content_hash[:12]}...")
             return True
         except sqlite3.IntegrityError as e:
-            print(f"DEBUG: Oferta już istnieje (UNIQUE constraint): {content_hash[:8]}...")
+            print(f"DEBUG: ABORT - Duplicate detected: {content_hash[:12]}...")
+            return False
+        except Exception as e:
+            print(f"DEBUG: ABORT - Database error: {e}")
             return False
         finally:
             conn.close()
