@@ -182,15 +182,27 @@ async def main_loop():
             olx_success = True
             allegro_success = True
             
-            # Facebook - rotacja grup (jedna grupa na cykl)
+            # Facebook - OBA systemy: powiadomienia + rotacja grup
+            
+            # 1. Najpierw sprawdź powiadomienia (szybkie)
+            try:
+                await fb_scraper.check_notifications(context, channel)
+                logger.info("✅ [FB] Powiadomienia sprawdzone")
+                # ASYNC SLEEP - pozwól Discordowi odetchnąć
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.warning(f"⚠️ [FB] Błąd powiadomień: {e}")
+                # Nie crashujemy całego FB z powodu powiadomień
+            
+            # 2. Potem rotacja grup (główny system)
             try:
                 await fb_scraper.scan_group_feed(context, channel)
-                logger.info("✅ [FB] Scraper zakończony sukcesem")
+                logger.info("✅ [FB] Rotacja grup zakończona")
                 # ASYNC SLEEP - pozwól Discordowi odetchnąć
                 await asyncio.sleep(0.1)
             except Exception as e:
                 fb_success = False
-                logger.error(f"❌ [FB] Błąd scrapera: {e}")
+                logger.error(f"❌ [FB] Błąd rotacji grup: {e}")
                 import traceback
                 logger.error(f"❌ [FB] Traceback: {traceback.format_exc()}")
                 # ASYNC SLEEP - pozwól Discordowi odetchnąć
