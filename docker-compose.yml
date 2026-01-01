@@ -16,5 +16,6 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-    # Fix dla Docker Compose - dodaj shm_size
-    shm_size: 2gb
+    # Fix dla Docker Compose - dodaj pamięć dla Playwright
+    shm_size: '2gb'
+    ipc: host

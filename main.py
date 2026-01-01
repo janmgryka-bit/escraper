@@ -115,8 +115,19 @@ async def main_loop():
                     bot_state["playwright_browser"] = new_browser
                     logger.info("✅ Nowy browser context otwarty")
                     
+                    # CRITICAL: Poczekaj na pełne zainicjowanie nowego context
+                    await asyncio.sleep(1)
+                    logger.info("⏱️ [BROWSER] Nowy context w pełni zainicjowany")
+                    
                 except Exception as e:
                     logger.error(f"❌ Błąd podczas browser rewind: {e}")
+            
+            # CRITICAL: Pobierz FRESH context po browser rewind
+            context = bot_state.get("playwright_context")
+            if not context:
+                logger.error("❌ [BROWSER] Brak dostępnego context - pomijam cykl")
+                await asyncio.sleep(30)
+                continue
             
             # Przeładuj config co 10 cykli (auto-refresh)
             if cycle % 10 == 0:
