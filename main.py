@@ -1,12 +1,13 @@
 import asyncio
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import discord
 from discord.ext import commands
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 import logging
+import yaml
 
 from utils.config import DISCORD_TOKEN, CHANNEL_ID, USER_AGENT, FB_DATA_DIR
 from utils.database import Database
@@ -39,8 +40,47 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 bot_state = {
     "is_running": False,
     "scraper_task": None,
-    "playwright_context": None
+    "playwright_context": None,
+    "current_group_index": 0  # Indeks aktualnej grupy do rotacji
 }
+
+async def refresh_groups_if_needed():
+    """Automatyczne odświeżanie listy grup co 12 godzin"""
+    try:
+        with open('config.yaml', 'r') as f:
+            config_data = yaml.safe_load(f)
+        
+        fb_config = config_data.get('facebook', {})
+        last_refresh = fb_config.get('last_groups_refresh')
+        refresh_hours = fb_config.get('refresh_groups_hours', 12)
+        
+        now = datetime.now()
+        should_refresh = False
+        
+        if not last_refresh:
+            should_refresh = True
+            logger.info("🔄 [GROUPS] Nigdy nie odświeżano grup - odświeżam...")
+        else:
+            if isinstance(last_refresh, str):
+                last_refresh = datetime.fromisoformat(last_refresh)
+            time_diff = now - last_refresh
+            if time_diff.total_seconds() > refresh_hours * 3600:
+                should_refresh = True
+                logger.info(f"🔄 [GROUPS] Minęło {refresh_hours}h - odświeżam grupy...")
+        
+        if should_refresh:
+            from extract_groups import extract_my_groups
+            groups_count = await extract_my_groups()
+            
+            # Aktualizuj timestamp w configu
+            config_data['facebook']['last_groups_refresh'] = now.isoformat()
+            with open('config.yaml', 'w') as f:
+                yaml.dump(config_data, f, default_flow_style=False)
+            
+            logger.info(f"✅ [GROUPS] Odświeżono {groups_count} grup")
+            
+    except Exception as e:
+        logger.error(f"❌ [GROUPS] Błąd odświeżania grup: {e}")
 
 async def main_loop():
     await bot.wait_until_ready()
@@ -129,6 +169,9 @@ async def main_loop():
                 await asyncio.sleep(30)
                 continue
             
+            # Automatyczne odświeżanie grup co 12 godzin
+            await refresh_groups_if_needed()
+            
             # Przeładuj config co 10 cykli (auto-refresh)
             if cycle % 10 == 0:
                 logger.info("🔄 Przeładuję konfigurację...")
@@ -139,9 +182,9 @@ async def main_loop():
             olx_success = True
             allegro_success = True
             
-            # Facebook notifications
+            # Facebook - rotacja grup (jedna grupa na cykl)
             try:
-                await fb_scraper.check_notifications(context, channel)
+                await fb_scraper.scan_group_feed(context, channel)
                 logger.info("✅ [FB] Scraper zakończony sukcesem")
                 # ASYNC SLEEP - pozwól Discordowi odetchnąć
                 await asyncio.sleep(0.1)

@@ -109,18 +109,193 @@ class FacebookScraper:
                 # Ten selektor nie zadziałał, próbuj następny
                 continue
         
-        if not cookie_found:
-            logger.info("✅ [FB] Okno cookies nie wystąpiło lub już zaakceptowane")
-            print("DEBUG: Okno cookies nie wystąpiło")
+        logger.info("✅ [FB] Okno cookies nie wystąpiło lub już zaakceptowane")
+        print("DEBUG: Okno cookies nie wystąpiło")
         
         return cookie_found
     
+    async def scan_group_feed(self, context, channel):
+        """
+        Skanuje feed jednej grupy Facebook (rotacja grup).
+        """
+        logger.info("🔔 [FB] Rozpoczynam skanowanie grupy FB...")
+        print("DEBUG: Rozpoczynam skanowanie grupy FB...")
+        
+        # Pobierz konfigurację Facebook
+        fb_config = self.config.config.get('facebook', {})
+        priority_groups = fb_config.get('priority_groups', [])
+        posts_per_group = fb_config.get('posts_per_group', 5)
+        group_rotation = fb_config.get('group_rotation', True)
+        
+        if not priority_groups:
+            logger.warning("⚠️ [FB] Brak grup w konfiguracji. Uruchom: python extract_groups.py")
+            return
+        
+        # Wybierz grupę do skanowania
+        from main import bot_state
+        current_index = bot_state.get('current_group_index', 0)
+        
+        if group_rotation:
+            # Rotacja grup - jedna grupa na cykl
+            group_url = priority_groups[current_index % len(priority_groups)]
+            bot_state['current_group_index'] = (current_index + 1) % len(priority_groups)
+            logger.info(f"🔄 [FB] Rotacja grup #{current_index + 1}/{len(priority_groups)}: {group_url}")
+        else:
+            # Skanuj wszystkie grupy (legacy mode)
+            group_url = priority_groups[0]
+            logger.info(f"📋 [FB] Skanowanie pierwszej grupy: {group_url}")
+        
+        # Skanuj wybraną grupę
+        await self._scan_single_group(context, channel, group_url, posts_per_group)
+
+    async def _scan_single_group(self, context, channel, group_url, posts_per_group):
+        """
+        Skanuje pojedynczą grupę Facebook i sprawdza najnowsze posty.
+        """
+        logger.info(f"🔍 [FB] Skanuję grupę: {group_url}")
+        
+        try:
+            page = await context.new_page()
+            logger.info(f"🔗 [FB] Wchodzę na grupę: {group_url}")
+            
+            # INCREASE TIMEOUTS - 60 sekund na polskie warunki sieciowe
+            await page.goto(group_url, timeout=60000, wait_until="domcontentloaded")
+            logger.info("✅ [FB] Strona grupy załadowana")
+            
+            # Czekaj na załadowanie postów
+            await asyncio.sleep(3)
+            
+            # Szukaj postów w grupie
+            post_selectors = [
+                'div[role="article"]',
+                'div[data-testid="story-subtitle"]',
+                'div.x1n2onr6',
+                'div.x1yztbdb'
+            ]
+            
+            posts_found = False
+            for selector in post_selectors:
+                try:
+                    posts = await page.locator(selector).all()
+                    if len(posts) > 0:
+                        logger.info(f"📊 [FB] Znaleziono {len(posts)} postów (selector: {selector})")
+                        posts_found = True
+                        
+                        # Przetwarzaj pierwsze N postów
+                        for i, post in enumerate(posts[:posts_per_group]):
+                            try:
+                                await self._process_group_post(page, post, i + 1, channel)
+                            except Exception as e:
+                                logger.warning(f"⚠️ [FB] Błąd przetwarzania posta #{i + 1}: {e}")
+                                continue
+                        
+                        break
+                except Exception as e:
+                    logger.debug(f"🔍 [FB] Selector {selector} nie zadziałał: {e}")
+                    continue
+            
+            if not posts_found:
+                logger.warning("⚠️ [FB] Nie znaleziono żadnych postów w grupie")
+            
+            await page.close()
+            logger.info("✅ [FB] Skanowanie grupy zakończone")
+            
+        except Exception as e:
+            logger.error(f"❌ [FB] Błąd skanowania grupy: {e}")
+            try:
+                await page.close()
+            except:
+                pass
+
+    async def _process_group_post(self, page, post_element, post_num, channel):
+        """
+        Przetwarza pojedynczy post z grupy Facebook.
+        """
+        try:
+            # Pobierz tekst posta
+            text_selectors = [
+                'div[data-testid="post_message"]',
+                'div.x1lliihq',
+                'div.xdj266r',
+                'span.x193iq5w'
+            ]
+            
+            post_text = ""
+            for selector in text_selectors:
+                try:
+                    text_el = post_element.locator(selector)
+                    if await text_el.count() > 0:
+                        post_text = await text_el.first.inner_text(timeout=2000)
+                        if len(post_text.strip()) > 10:
+                            break
+                except:
+                    continue
+            
+            if not post_text or len(post_text.strip()) < 10:
+                logger.debug(f"⏭️ [FB] Post #{post_num} - brak treści")
+                return
+            
+            # Sprawdź czy post zawiera słowa kluczowe (iPhone)
+            post_lower = post_text.lower()
+            iphone_keywords = ['iphone', 'apple', 'sprzedam', 'kupię']
+            
+            if not any(keyword in post_lower for keyword in iphone_keywords):
+                logger.debug(f"⏭️ [FB] Post #{post_num} - nie zawiera słów kluczowych")
+                return
+            
+            logger.info(f"🎯 [FB] Post #{post_num} zawiera słowa kluczowe: {post_text[:50]}...")
+            
+            # Wyodrębnij cenę
+            import re
+            price_patterns = [
+                r'(\d+)\s*z[łl](?!\s*gb)',
+                r'(\d+)\s*pln(?!\s*gb)',
+                r'cena[:\s]+(\d+)(?!\s*gb)',
+                r'(\d+)\s*z[łl]ot[yey](?!\s*gb)'
+            ]
+            
+            price_val = 0
+            for pattern in price_patterns:
+                match = re.search(pattern, post_text.lower())
+                if match:
+                    price_text = match.group(0)
+                    if 'gb' not in price_text.lower():
+                        price_val = int(match.group(1))
+                        logger.info(f"💰 [FB] Wyodrębniono cenę: {price_val}zł (text: '{price_text}')")
+                        break
+            
+            if price_val == 0:
+                logger.debug(f"⏭️ [FB] Post #{post_num} - brak ceny")
+                return
+            
+            # Sprawdź budżet
+            max_budget = self.config.get_max_budget()
+            if price_val > max_budget:
+                logger.info(f"⏭️ [FB] Post #{post_num} - cena {price_val}zł przekracza budżet {max_budget}zł")
+                return
+            
+            # Generuj hash i sprawdź duplikaty
+            group_name = f"Grupa FB #{post_num}"
+            content_hash = self.db.get_offer_hash(group_name, price_val, post_text, "Facebook")
+            
+            if not self.db.commit_or_abort(content_hash, group_name, price_val, f"grupa_fb_post_{post_num}"):
+                logger.info(f"⏭️ [FB] Post #{post_num} - duplikat")
+                return
+            
+            logger.info(f"🎉 [FB] Znaleziono okazję w grupie: {group_name} | {price_val}zł")
+            
+            # TODO: Tutaj można dodać wysyłanie do Discorda
+            # await self._send_to_discord(channel, group_name, price_val, post_text, "Facebook")
+            
+        except Exception as e:
+            logger.error(f"❌ [FB] Błąd przetwarzania posta #{post_num}: {e}")
+
     async def check_notifications(self, context, channel):
         """
-        Sprawdza powiadomienia FB, wyciąga nazwę grupy i treść, 
-        klika w post i skanuje pełną zawartość.
+        Główna funkcja sprawdzania powiadomień Facebook (legacy).
         """
         logger.info("🔔 [FB] Rozpoczynam sprawdzanie powiadomień FB...")
+        print("DEBUG: Rozpoczynam sprawdzanie powiadomień FB...")
         
         try:
             page = await context.new_page()
