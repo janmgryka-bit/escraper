@@ -1,293 +1,251 @@
-# ========================================
-# ESCRAPER - Konfiguracja Zaawansowana
-# ========================================
-
-# Ogólne ustawienia
-general:
-  max_budget: 500  # Maksymalny budżet na pojedynczą ofertę (zł)
-  check_interval_min: 120  # Minimalny czas między skanowaniami (sekundy)
-  check_interval_max: 240  # Maksymalny czas między skanowaniami (sekundy)
-  
-# Modele iPhone do wyszukiwania
-models:
-  enabled:
-    - "iphone 15 pro max"
-    - "iphone 15 pro"
-    - "iphone 15 plus"
-    - "iphone 15"
-    - "iphone 14 pro max"
-    - "iphone 14 pro"
-    - "iphone 14 plus"
-    - "iphone 14"
-    - "iphone 13 pro max"
-    - "iphone 13 pro"
-    - "iphone 13"
-    - "iphone 12 pro max"
-    - "iphone 12 pro"
-    - "iphone 12"
-    - "iphone 11 pro max"
-    - "iphone 11 pro"
-    - "iphone 11"
-    - "iphone se 2022"
-    - "iphone se 2020"
-  
-  # Modele do pomijania (stare/nieopłacalne)
-  excluded:
-    - "iphone x"
-    - "iphone 8"
-    - "iphone 7"
-    - "iphone 6"
-    - "iphone se 2016"
-
-# Stany urządzeń do wyszukiwania
-conditions:
-  uszkodzony: true      # Uszkodzony ekran, obudowa, etc.
-  zablokowany: true     # Zablokowany iCloud
-  uzywany: true         # Używany, sprawny
-  nowy: false            # Nowy, nieużywany
-  na_czesci: true       # Na części
-  
-# Ceny rynkowe i widelki zysku (zł)
-pricing:
-  # iPhone 15 Series
-  "iphone 15 pro max":
-    market_price: 5500      # Cena rynkowa sprawnego
-    buy_max_working: 4800   # Max cena zakupu sprawnego
-    buy_max_broken: 3000    # Max cena zakupu uszkodzonego
-    buy_max_locked: 2000    # Max cena zakupu zablokowanego
-    repair_cost: 800        # Koszt naprawy (ekran + obudowa)
-    unlock_cost: 0          # Koszt odblokowania (niemożliwe)
-    min_profit: 500         # Minimalny zysk żeby było opłacalne
-    
-  "iphone 15 pro":
-    market_price: 4800
-    buy_max_working: 4200
-    buy_max_broken: 2500
-    buy_max_locked: 1800
-    repair_cost: 700
-    unlock_cost: 0
-    min_profit: 500
-    
-  "iphone 15":
-    market_price: 3800
-    buy_max_working: 3300
-    buy_max_broken: 2000
-    buy_max_locked: 1500
-    repair_cost: 600
-    unlock_cost: 0
-    min_profit: 400
-    
-  # iPhone 14 Series
-  "iphone 14 pro max":
-    market_price: 4500
-    buy_max_working: 3900
-    buy_max_broken: 2300
-    buy_max_locked: 1600
-    repair_cost: 700
-    unlock_cost: 0
-    min_profit: 400
-    
-  "iphone 14 pro":
-    market_price: 3900
-    buy_max_working: 3400
-    buy_max_broken: 2000
-    buy_max_locked: 1400
-    repair_cost: 650
-    unlock_cost: 0
-    min_profit: 400
-    
-  "iphone 14":
-    market_price: 3200
-    buy_max_working: 2800
-    buy_max_broken: 1700
-    buy_max_locked: 1200
-    repair_cost: 550
-    unlock_cost: 0
-    min_profit: 350
-    
-  # iPhone 13 Series
-  "iphone 13 pro max":
-    market_price: 3500
-    buy_max_working: 3000
-    buy_max_broken: 1800
-    buy_max_locked: 1200
-    repair_cost: 600
-    unlock_cost: 0
-    min_profit: 350
-    
-  "iphone 13 pro":
-    market_price: 3000
-    buy_max_working: 2600
-    buy_max_broken: 1500
-    buy_max_locked: 1000
-    repair_cost: 550
-    unlock_cost: 0
-    min_profit: 300
-    
-  "iphone 13":
-    market_price: 2400
-    buy_max_working: 2100
-    buy_max_broken: 1300
-    buy_max_locked: 900
-    repair_cost: 500
-    unlock_cost: 0
-    min_profit: 300
-    
-  # iPhone 12 Series
-  "iphone 12 pro max":
-    market_price: 2800
-    buy_max_working: 2400
-    buy_max_broken: 1400
-    buy_max_locked: 900
-    repair_cost: 500
-    unlock_cost: 0
-    min_profit: 300
-    
-  "iphone 12 pro":
-    market_price: 2400
-    buy_max_working: 2100
-    buy_max_broken: 1200
-    buy_max_locked: 800
-    repair_cost: 450
-    unlock_cost: 0
-    min_profit: 250
-    
-  "iphone 12":
-    market_price: 1900
-    buy_max_working: 1650
-    buy_max_broken: 1000
-    buy_max_locked: 700
-    repair_cost: 400
-    unlock_cost: 0
-    min_profit: 250
-    
-  # iPhone 11 Series
-  "iphone 11 pro max":
-    market_price: 2200
-    buy_max_working: 1900
-    buy_max_broken: 1100
-    buy_max_locked: 700
-    repair_cost: 400
-    unlock_cost: 0
-    min_profit: 250
-    
-  "iphone 11 pro":
-    market_price: 1900
-    buy_max_working: 1650
-    buy_max_broken: 950
-    buy_max_locked: 600
-    repair_cost: 350
-    unlock_cost: 0
-    min_profit: 200
-    
-  "iphone 11":
-    market_price: 1500
-    buy_max_working: 1300
-    buy_max_broken: 800
-    buy_max_locked: 500
-    repair_cost: 300
-    unlock_cost: 0
-    min_profit: 200
-    
-  # iPhone SE
-  "iphone se 2022":
-    market_price: 1600
-    buy_max_working: 1400
-    buy_max_broken: 850
-    buy_max_locked: 550
-    repair_cost: 250
-    unlock_cost: 0
-    min_profit: 200
-    
-  "iphone se 2020":
-    market_price: 1000
-    buy_max_working: 850
-    buy_max_broken: 500
-    buy_max_locked: 350
-    repair_cost: 200
-    unlock_cost: 0
-    min_profit: 150
-
-# Inteligentne łączenie ofert (2 uszkodzone = 1 sprawny)
-smart_matching:
-  enabled: true
-  max_combined_cost: 0.85  # Max 85% ceny rynkowej dla połączonych
-  min_profit_combined: 400  # Minimalny zysk z połączenia
-  
-  # Jakie kombinacje są możliwe
-  combinations:
-    - type: "ekran + obudowa"
-      description: "Jeden z rozbitym ekranem + drugi z rozbitą obudową"
-      feasible: true
-      
-    - type: "icloud + uszkodzony"
-      description: "Jeden zablokowany iCloud + drugi uszkodzony (na części)"
-      feasible: true
-      
-    - type: "2x uszkodzone"
-      description: "Dwa uszkodzone telefony tego samego modelu"
-      feasible: true
-
-# AI Analiza (opcjonalne)
 ai:
-  enabled: true  # Włącz/wyłącz AI
-  provider: "groq"  # groq, openai, ollama
-  model: "llama-3.3-70b-versatile"  # Aktualny model (grudzień 2024)
-  
-  # Co AI ma sprawdzać
   checks:
-    analyze_description: true    # Analizuj opis oferty
-    analyze_images: false         # Analizuj zdjęcia (wymaga vision model)
-    detect_scam: true            # Wykrywaj oszustwa
-    estimate_condition: true     # Oceń stan na podstawie opisu i zdjęć
-    suggest_price: true          # Zaproponuj cenę
-    calculate_profit: true       # Policz potencjalny zysk
-    
-  # Prompt dla AI
-  prompt_template: |
-    Jesteś ekspertem od iPhone'ów. Przeanalizuj ofertę:
-    
-    Model: {model}
-    Cena: {price} zł
-    Opis: {description}
-    
-    Oceń:
-    1. Czy to dobra okazja? (tak/nie)
-    2. Jaki jest prawdziwy stan telefonu? (1-10)
-    3. Czy to może być oszustwo? (tak/nie)
-    4. Jaki jest szacowany zysk po naprawie?
-    5. Czy warto kupić?
-    
-    Odpowiedź w formacie JSON.
-
-# Powiadomienia Discord
+    analyze_description: true
+    analyze_images: false
+    calculate_profit: true
+    detect_scam: true
+    estimate_condition: true
+    suggest_price: true
+  enabled: true
+  model: llama-3.3-70b-versatile
+  prompt_template: "Jeste\u015B ekspertem od iPhone'\xF3w. Przeanalizuj ofert\u0119\
+    :\n\nModel: {model}\nCena: {price} z\u0142\nOpis: {description}\n\nOce\u0144:\n\
+    1. Czy to dobra okazja? (tak/nie)\n2. Jaki jest prawdziwy stan telefonu? (1-10)\n\
+    3. Czy to mo\u017Ce by\u0107 oszustwo? (tak/nie)\n4. Jaki jest szacowany zysk\
+    \ po naprawie?\n5. Czy warto kupi\u0107?\n\nOdpowied\u017A w formacie JSON.\n"
+  provider: groq
+conditions:
+  na_czesci: true
+  nowy: false
+  uszkodzony: true
+  uzywany: true
+  zablokowany: true
 discord:
-  send_all: false              # Wysyłaj wszystkie oferty czy tylko opłacalne
-  send_ai_analysis: true       # Dodaj analizę AI do embedu
-  send_profit_calc: true       # Dodaj kalkulację zysku
-  send_smart_matches: true     # Wysyłaj propozycje łączenia ofert
-  
-  # Kolory embedów
   colors:
-    profitable: 0x00ff00      # Zielony - opłacalne
-    maybe: 0xffff00           # Żółty - może być
-    not_profitable: 0xff0000  # Czerwony - nieopłacalne
-    smart_match: 0x00ffff     # Cyan - inteligentne połączenie
-
-# Facebook - grupy i skanowanie
+    maybe: 16776960
+    not_profitable: 16711680
+    profitable: 65280
+    smart_match: 65535
+  send_ai_analysis: true
+  send_all: false
+  send_profit_calc: true
+  send_smart_matches: true
 facebook:
   enabled: true
-  priority_groups: []  # Lista grup do skanowania (wypełniona przez extract_groups.py)
-  posts_per_group: 5   # Ile postów sprawdzać w jednej grupie na cykl
-  group_rotation: true  # Rotacja grup (jedna grupa na cykl)
-  refresh_groups_hours: 12  # Jak często odświeżać listę grup (w godzinach)
-  last_groups_refresh: null  # Timestamp ostatniego odświeżenia
-
-# Źródła danych
+  group_rotation: true
+  last_groups_refresh: '2026-01-01T08:23:40.538370'
+  posts_per_group: 5
+  priority_groups:
+  - https://www.facebook.com/groups/2272593399726069/posts/4279459649039424/
+  - https://www.facebook.com/groups/5354513511301326/
+  - https://www.facebook.com/groups/895030401787758/
+  - https://www.facebook.com/groups/2272593399726069/
+  - https://www.facebook.com/groups/discover/
+  - https://www.facebook.com/groups/963019491805094/user/61560048381140/
+  - https://www.facebook.com/groups/2272593399726069/user/100095252095361/
+  - https://www.facebook.com/groups/elektro.gsm/
+  - https://www.facebook.com/groups/2272593399726069/user/100002191691144/
+  - https://www.facebook.com/groups/feed/
+  - https://www.facebook.com/groups/
+  - https://www.facebook.com/groups/963019491805094/posts/1615105336596503/
+  - https://www.facebook.com/groups/791801871649496/
+  - https://www.facebook.com/groups/2272593399726069/user/100061347022172/
+  - https://www.facebook.com/groups/398072464810732/
+  - https://www.facebook.com/groups/963019491805094/
+  - https://www.facebook.com/groups/PRACA.W.WARSZAWIE/
+  - https://www.facebook.com/groups/230062985204248/
+  - https://www.facebook.com/groups/2272593399726069/user/100003040027885/
+  - https://www.facebook.com/groups/joins/
+  - https://www.facebook.com/groups/808509246235501/
+  - https://www.facebook.com/groups/963019491805094/posts/1615405476566489/
+  - https://www.facebook.com/groups/iphonypolska/
+  refresh_groups_hours: 12
+general:
+  check_interval_max: 240
+  check_interval_min: 120
+  max_budget: 500
+models:
+  enabled:
+  - iphone 15 pro max
+  - iphone 15 pro
+  - iphone 15 plus
+  - iphone 15
+  - iphone 14 pro max
+  - iphone 14 pro
+  - iphone 14 plus
+  - iphone 14
+  - iphone 13 pro max
+  - iphone 13 pro
+  - iphone 13
+  - iphone 12 pro max
+  - iphone 12 pro
+  - iphone 12
+  - iphone 11 pro max
+  - iphone 11 pro
+  - iphone 11
+  - iphone se 2022
+  - iphone se 2020
+  excluded:
+  - iphone x
+  - iphone 8
+  - iphone 7
+  - iphone 6
+  - iphone se 2016
+pricing:
+  iphone 11:
+    buy_max_broken: 800
+    buy_max_locked: 500
+    buy_max_working: 1300
+    market_price: 1500
+    min_profit: 200
+    repair_cost: 300
+    unlock_cost: 0
+  iphone 11 pro:
+    buy_max_broken: 950
+    buy_max_locked: 600
+    buy_max_working: 1650
+    market_price: 1900
+    min_profit: 200
+    repair_cost: 350
+    unlock_cost: 0
+  iphone 11 pro max:
+    buy_max_broken: 1100
+    buy_max_locked: 700
+    buy_max_working: 1900
+    market_price: 2200
+    min_profit: 250
+    repair_cost: 400
+    unlock_cost: 0
+  iphone 12:
+    buy_max_broken: 1000
+    buy_max_locked: 700
+    buy_max_working: 1650
+    market_price: 1900
+    min_profit: 250
+    repair_cost: 400
+    unlock_cost: 0
+  iphone 12 pro:
+    buy_max_broken: 1200
+    buy_max_locked: 800
+    buy_max_working: 2100
+    market_price: 2400
+    min_profit: 250
+    repair_cost: 450
+    unlock_cost: 0
+  iphone 12 pro max:
+    buy_max_broken: 1400
+    buy_max_locked: 900
+    buy_max_working: 2400
+    market_price: 2800
+    min_profit: 300
+    repair_cost: 500
+    unlock_cost: 0
+  iphone 13:
+    buy_max_broken: 1300
+    buy_max_locked: 900
+    buy_max_working: 2100
+    market_price: 2400
+    min_profit: 300
+    repair_cost: 500
+    unlock_cost: 0
+  iphone 13 pro:
+    buy_max_broken: 1500
+    buy_max_locked: 1000
+    buy_max_working: 2600
+    market_price: 3000
+    min_profit: 300
+    repair_cost: 550
+    unlock_cost: 0
+  iphone 13 pro max:
+    buy_max_broken: 1800
+    buy_max_locked: 1200
+    buy_max_working: 3000
+    market_price: 3500
+    min_profit: 350
+    repair_cost: 600
+    unlock_cost: 0
+  iphone 14:
+    buy_max_broken: 1700
+    buy_max_locked: 1200
+    buy_max_working: 2800
+    market_price: 3200
+    min_profit: 350
+    repair_cost: 550
+    unlock_cost: 0
+  iphone 14 pro:
+    buy_max_broken: 2000
+    buy_max_locked: 1400
+    buy_max_working: 3400
+    market_price: 3900
+    min_profit: 400
+    repair_cost: 650
+    unlock_cost: 0
+  iphone 14 pro max:
+    buy_max_broken: 2300
+    buy_max_locked: 1600
+    buy_max_working: 3900
+    market_price: 4500
+    min_profit: 400
+    repair_cost: 700
+    unlock_cost: 0
+  iphone 15:
+    buy_max_broken: 2000
+    buy_max_locked: 1500
+    buy_max_working: 3300
+    market_price: 3800
+    min_profit: 400
+    repair_cost: 600
+    unlock_cost: 0
+  iphone 15 pro:
+    buy_max_broken: 2500
+    buy_max_locked: 1800
+    buy_max_working: 4200
+    market_price: 4800
+    min_profit: 500
+    repair_cost: 700
+    unlock_cost: 0
+  iphone 15 pro max:
+    buy_max_broken: 3000
+    buy_max_locked: 2000
+    buy_max_working: 4800
+    market_price: 5500
+    min_profit: 500
+    repair_cost: 800
+    unlock_cost: 0
+  iphone se 2020:
+    buy_max_broken: 500
+    buy_max_locked: 350
+    buy_max_working: 850
+    market_price: 1000
+    min_profit: 150
+    repair_cost: 200
+    unlock_cost: 0
+  iphone se 2022:
+    buy_max_broken: 850
+    buy_max_locked: 550
+    buy_max_working: 1400
+    market_price: 1600
+    min_profit: 200
+    repair_cost: 250
+    unlock_cost: 0
+smart_matching:
+  combinations:
+  - description: "Jeden z rozbitym ekranem + drugi z rozbit\u0105 obudow\u0105"
+    feasible: true
+    type: ekran + obudowa
+  - description: "Jeden zablokowany iCloud + drugi uszkodzony (na cz\u0119\u015Bci)"
+    feasible: true
+    type: icloud + uszkodzony
+  - description: Dwa uszkodzone telefony tego samego modelu
+    feasible: true
+    type: 2x uszkodzone
+  enabled: true
+  max_combined_cost: 0.85
+  min_profit_combined: 400
 sources:
-  olx: true
-  facebook: true
   allegro_lokalnie:
     enabled: true
-    url: "https://allegrolokalnie.pl/oferty/smartfony-i-telefony-komorkowe/apple-48978/warszawa?zrodlo=allegro&zrodlo=lokalnie&odleglosc=50&typ=kup-teraz&typ=ogloszenie&stan=uzywane&stan=uszkodzone"  # Ustaw swoje filtry w przeglądarce i skopiuj URL
-  vinted: false   # TODO: do zaimplementowania
+    url: https://allegrolokalnie.pl/oferty/smartfony-i-telefony-komorkowe/apple-48978/warszawa?zrodlo=allegro&zrodlo=lokalnie&odleglosc=50&typ=kup-teraz&typ=ogloszenie&stan=uzywane&stan=uszkodzone
+  facebook: true
+  olx: true
+  vinted: false
