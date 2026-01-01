@@ -139,7 +139,15 @@ async def main_loop():
                             '--disable-gpu',
                             '--disable-software-rasterizer',
                             '--disable-extensions',
-                            '--disable-web-security'
+                            '--disable-web-security',
+                            '--disable-background-timer-throttling',
+                            '--disable-backgrounding-occluded-windows',
+                            '--disable-renderer-backgrounding',
+                            '--disable-features=TranslateUI',
+                            '--disable-ipc-flooding-protection',
+                            '--max-old-space-size=512',
+                            '--memory-pressure-off',
+                            '--aggressive-cache-discard'
                         ]
                     )
                     
@@ -158,6 +166,11 @@ async def main_loop():
                     # CRITICAL: Poczekaj na pełne zainicjowanie nowego context
                     await asyncio.sleep(1)
                     logger.info("⏱️ [BROWSER] Nowy context w pełni zainicjowany")
+                    
+                    # MEMORY CLEANUP - wymuś garbage collection
+                    import gc
+                    gc.collect()
+                    logger.info("🧹 [MEMORY] Garbage collection wykonany")
                     
                 except Exception as e:
                     logger.error(f"❌ Błąd podczas browser rewind: {e}")

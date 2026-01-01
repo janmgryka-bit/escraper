@@ -8,11 +8,32 @@ ai:
     suggest_price: true
   enabled: true
   model: llama-3.3-70b-versatile
-  prompt_template: "Jeste\u015B ekspertem od iPhone'\xF3w. Przeanalizuj ofert\u0119\
-    :\n\nModel: {model}\nCena: {price} z\u0142\nOpis: {description}\n\nOce\u0144:\n\
-    1. Czy to dobra okazja? (tak/nie)\n2. Jaki jest prawdziwy stan telefonu? (1-10)\n\
-    3. Czy to mo\u017Ce by\u0107 oszustwo? (tak/nie)\n4. Jaki jest szacowany zysk\
-    \ po naprawie?\n5. Czy warto kupi\u0107?\n\nOdpowied\u017A w formacie JSON.\n"
+  prompt_template: 'Jesteś ekspertem od iPhone''ów. Przeanalizuj ofertę:
+
+
+    Model: {model}
+
+    Cena: {price} zł
+
+    Opis: {description}
+
+
+    Oceń:
+
+    1. Czy to dobra okazja? (tak/nie)
+
+    2. Jaki jest prawdziwy stan telefonu? (1-10)
+
+    3. Czy to może być oszustwo? (tak/nie)
+
+    4. Jaki jest szacowany zysk po naprawie?
+
+    5. Czy warto kupić?
+
+
+    Odpowiedź w formacie JSON.
+
+    '
   provider: groq
 conditions:
   na_czesci: true
@@ -36,29 +57,14 @@ facebook:
   last_groups_refresh: '2026-01-01T08:23:40.538370'
   posts_per_group: 5
   priority_groups:
-  - https://www.facebook.com/groups/2272593399726069/posts/4279459649039424/
-  - https://www.facebook.com/groups/5354513511301326/
-  - https://www.facebook.com/groups/895030401787758/
-  - https://www.facebook.com/groups/2272593399726069/
-  - https://www.facebook.com/groups/discover/
-  - https://www.facebook.com/groups/963019491805094/user/61560048381140/
-  - https://www.facebook.com/groups/2272593399726069/user/100095252095361/
-  - https://www.facebook.com/groups/elektro.gsm/
-  - https://www.facebook.com/groups/2272593399726069/user/100002191691144/
-  - https://www.facebook.com/groups/feed/
-  - https://www.facebook.com/groups/
-  - https://www.facebook.com/groups/963019491805094/posts/1615105336596503/
-  - https://www.facebook.com/groups/791801871649496/
-  - https://www.facebook.com/groups/2272593399726069/user/100061347022172/
-  - https://www.facebook.com/groups/398072464810732/
-  - https://www.facebook.com/groups/963019491805094/
-  - https://www.facebook.com/groups/PRACA.W.WARSZAWIE/
-  - https://www.facebook.com/groups/230062985204248/
-  - https://www.facebook.com/groups/2272593399726069/user/100003040027885/
-  - https://www.facebook.com/groups/joins/
-  - https://www.facebook.com/groups/808509246235501/
-  - https://www.facebook.com/groups/963019491805094/posts/1615405476566489/
-  - https://www.facebook.com/groups/iphonypolska/
+  - https://www.facebook.com/groups/5354513511301326
+  - https://www.facebook.com/groups/895030401787758
+  - https://www.facebook.com/groups/2272593399726069
+  - https://www.facebook.com/groups/791801871649496
+  - https://www.facebook.com/groups/398072464810732
+  - https://www.facebook.com/groups/963019491805094
+  - https://www.facebook.com/groups/230062985204248
+  - https://www.facebook.com/groups/808509246235501
   refresh_groups_hours: 12
 general:
   check_interval_max: 240
@@ -230,10 +236,10 @@ pricing:
     unlock_cost: 0
 smart_matching:
   combinations:
-  - description: "Jeden z rozbitym ekranem + drugi z rozbit\u0105 obudow\u0105"
+  - description: Jeden z rozbitym ekranem + drugi z rozbitą obudową
     feasible: true
     type: ekran + obudowa
-  - description: "Jeden zablokowany iCloud + drugi uszkodzony (na cz\u0119\u015Bci)"
+  - description: Jeden zablokowany iCloud + drugi uszkodzony (na części)
     feasible: true
     type: icloud + uszkodzony
   - description: Dwa uszkodzone telefony tego samego modelu

@@ -163,7 +163,11 @@ class FacebookScraper:
             logger.info("✅ [FB] Strona grupy załadowana")
             
             # Czekaj na załadowanie postów
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
+            
+            # MEMORY CLEANUP - wymuś GC po załadowaniu strony
+            import gc
+            gc.collect()
             
             # Szukaj postów w grupie
             post_selectors = [
@@ -197,8 +201,11 @@ class FacebookScraper:
             if not posts_found:
                 logger.warning("⚠️ [FB] Nie znaleziono żadnych postów w grupie")
             
+            # MEMORY CLEANUP przed zamknięciem strony
             await page.close()
-            logger.info("✅ [FB] Skanowanie grupy zakończone")
+            import gc
+            gc.collect()
+            logger.info("✅ [FB] Skanowanie grupy zakończone + GC")
             
         except Exception as e:
             logger.error(f"❌ [FB] Błąd skanowania grupy: {e}")
