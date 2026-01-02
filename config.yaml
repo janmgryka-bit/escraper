@@ -8,32 +8,11 @@ ai:
     suggest_price: true
   enabled: true
   model: llama-3.3-70b-versatile
-  prompt_template: 'Jesteś ekspertem od iPhone''ów. Przeanalizuj ofertę:
-
-
-    Model: {model}
-
-    Cena: {price} zł
-
-    Opis: {description}
-
-
-    Oceń:
-
-    1. Czy to dobra okazja? (tak/nie)
-
-    2. Jaki jest prawdziwy stan telefonu? (1-10)
-
-    3. Czy to może być oszustwo? (tak/nie)
-
-    4. Jaki jest szacowany zysk po naprawie?
-
-    5. Czy warto kupić?
-
-
-    Odpowiedź w formacie JSON.
-
-    '
+  prompt_template: "Jeste\u015B ekspertem od iPhone'\xF3w. Przeanalizuj ofert\u0119\
+    :\n\nModel: {model}\nCena: {price} z\u0142\nOpis: {description}\n\nOce\u0144:\n\
+    1. Czy to dobra okazja? (tak/nie)\n2. Jaki jest prawdziwy stan telefonu? (1-10)\n\
+    3. Czy to mo\u017Ce by\u0107 oszustwo? (tak/nie)\n4. Jaki jest szacowany zysk\
+    \ po naprawie?\n5. Czy warto kupi\u0107?\n\nOdpowied\u017A w formacie JSON.\n"
   provider: groq
 conditions:
   na_czesci: true
@@ -54,7 +33,7 @@ discord:
 facebook:
   enabled: true
   group_rotation: true
-  last_groups_refresh: '2026-01-01T08:23:40.538370'
+  last_groups_refresh: '2026-01-02T08:33:22.292733'
   posts_per_group: 5
   priority_groups:
   - https://www.facebook.com/groups/5354513511301326
@@ -236,10 +215,10 @@ pricing:
     unlock_cost: 0
 smart_matching:
   combinations:
-  - description: Jeden z rozbitym ekranem + drugi z rozbitą obudową
+  - description: "Jeden z rozbitym ekranem + drugi z rozbit\u0105 obudow\u0105"
     feasible: true
     type: ekran + obudowa
-  - description: Jeden zablokowany iCloud + drugi uszkodzony (na części)
+  - description: "Jeden zablokowany iCloud + drugi uszkodzony (na cz\u0119\u015Bci)"
     feasible: true
     type: icloud + uszkodzony
   - description: Dwa uszkodzone telefony tego samego modelu
